@@ -5,7 +5,6 @@ import (
 	stdpath "path"
 	"strings"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/pkg/errors"
@@ -54,24 +53,12 @@ func GetSearchNodesByParent(parent string) ([]model.SearchNode, error) {
 	return nodes, nil
 }
 
-func SearchNode(req model.SearchReq, useFullText bool) ([]model.SearchNode, int64, error) {
-	var searchDB *gorm.DB
-	if !useFullText || conf.Conf.Database.Type == "sqlite3" {
-		keywordsClause := db.Where("1 = 1")
-		for _, keyword := range strings.Fields(req.Keywords) {
-			keywordsClause = keywordsClause.Where("name LIKE ?", fmt.Sprintf("%%%s%%", keyword))
-		}
-		searchDB = db.Model(&model.SearchNode{}).Where(whereInParent(req.Parent)).Where(keywordsClause)
-	} else {
-		switch conf.Conf.Database.Type {
-		case "mysql":
-			searchDB = db.Model(&model.SearchNode{}).Where(whereInParent(req.Parent)).
-				Where("MATCH (name) AGAINST (? IN BOOLEAN MODE)", "'*"+req.Keywords+"*'")
-		case "postgres":
-			searchDB = db.Model(&model.SearchNode{}).Where(whereInParent(req.Parent)).
-				Where("to_tsvector(name) @@ to_tsquery(?)", strings.Join(strings.Fields(req.Keywords), " & "))
-		}
+func SearchNode(req model.SearchReq) ([]model.SearchNode, int64, error) {
+	keywordsClause := db.Where("1 = 1")
+	for _, keyword := range strings.Fields(req.Keywords) {
+		keywordsClause = keywordsClause.Where("name LIKE ?", fmt.Sprintf("%%%s%%", keyword))
 	}
+	searchDB := db.Model(&model.SearchNode{}).Where(whereInParent(req.Parent)).Where(keywordsClause)
 
 	if req.Scope != 0 {
 		isDir := req.Scope == 1

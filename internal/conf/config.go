@@ -7,16 +7,8 @@ import (
 )
 
 type Database struct {
-	Type        string `json:"type" env:"TYPE"`
-	Host        string `json:"host" env:"HOST"`
-	Port        int    `json:"port" env:"PORT"`
-	User        string `json:"user" env:"USER"`
-	Password    string `json:"password" env:"PASS"`
-	Name        string `json:"name" env:"NAME"`
 	DBFile      string `json:"db_file" env:"FILE"`
 	TablePrefix string `json:"table_prefix" env:"TABLE_PREFIX"`
-	SSLMode     string `json:"ssl_mode" env:"SSL_MODE"`
-	DSN         string `json:"dsn" env:"DSN"`
 }
 
 type Meilisearch struct {
@@ -157,8 +149,6 @@ func DefaultConfig(dataDir string) *Config {
 		TokenExpiresIn: 48,
 		TempDir:        tempDir,
 		Database: Database{
-			Type:        "sqlite3",
-			Port:        0,
 			TablePrefix: "x_",
 			DBFile:      dbPath,
 		},

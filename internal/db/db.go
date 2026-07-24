@@ -3,7 +3,6 @@ package db
 import (
 	log "github.com/sirupsen/logrus"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"gorm.io/gorm"
 )
@@ -19,13 +18,7 @@ func Init(d *gorm.DB) {
 }
 
 func AutoMigrate(dst ...interface{}) error {
-	var err error
-	if conf.Conf.Database.Type == "mysql" {
-		err = db.Set("gorm:table_options", "ENGINE=InnoDB CHARSET=utf8mb4").AutoMigrate(dst...)
-	} else {
-		err = db.AutoMigrate(dst...)
-	}
-	return err
+	return db.AutoMigrate(dst...)
 }
 
 func GetDb() *gorm.DB {

@@ -15,6 +15,7 @@ OpenList 的通用发行版，也不保持容器和多操作系统兼容性。
 - 仅保留 Local、Dropbox 和 S3 存储驱动。
 - Dropbox 与 S3 下载经过服务端代理，以执行认证和目录权限检查。
 - 使用简体中文、现代浏览器前端。
+- 仅使用 SQLite 数据库。
 - 使用 systemd 管理服务，由 Caddy 或 Nginx 提供 HTTPS。
 
 ## Git 与前端基线
@@ -42,7 +43,7 @@ OpenList 的通用发行版，也不保持容器和多操作系统兼容性。
 - 文件列表、详情、搜索、上传、下载、移动、复制、重命名和删除。
 - 图片、音视频、PDF、Markdown、Office、文本和压缩包预览。
 - WebDAV、FTP 和 SFTP。
-- SQLite、MySQL 和 PostgreSQL。
+- SQLite。
 - Local、Dropbox 和兼容 AWS S3 API 的对象存储。
 - 管理存储、用户和服务器运行所需的后台任务。
 
@@ -61,6 +62,7 @@ OpenList 的通用发行版，也不保持容器和多操作系统兼容性。
 - Dockerfile、Compose、容器入口脚本、镜像构建和镜像清理工作流。
 - Windows、macOS、Android、FreeBSD 和 OpenWRT 构建发布流程。
 - Windows 专用进程、文件系统和内存实现。
+- MySQL 和 PostgreSQL 数据库驱动、连接配置及专用查询逻辑。
 - 上游多语言 README 和前端语言切换。
 
 协议兼容文本不等于平台支持。例如 Windows WebDAV 客户端兼容逻辑、APK MIME
@@ -76,6 +78,7 @@ OpenList 的通用发行版，也不保持容器和多操作系统兼容性。
 4. 登录页、静态资源、登录/SSO 回调、必要公开设置和健康检查可以匿名访问。
 5. `drivers/all.go` 只能注册 Local、Dropbox 和 S3。
 6. 不得重新引入 `internal/offline_download`、`pkg/aria2` 或对应路由与设置。
+7. 数据库启动只能打开 SQLite，不得重新引入 MySQL 或 PostgreSQL 驱动和配置。
 
 ## 前端补丁流程
 
@@ -161,6 +164,7 @@ go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox ./drive
 - 未认证用户无法读取文件信息或内容。
 - 普通用户无法越过 `base_path`。
 - Local、Dropbox 和 S3 仍可完成上传与下载。
+- 默认配置只能生成 SQLite 数据库文件，且服务可完成建表和读写。
 
 `go test ./...` 在缺少 FUSE/CGO 开发环境时可能无法编译 `internal/fuse`。某些受控
 执行环境还会注入 HTTP 安全传输层，导致 `internal/net` 的代理类型断言失败。这些
@@ -180,6 +184,22 @@ go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox ./drive
   兼容，不应按文件名关键词机械删除。
 
 ## 变更记录
+
+### 2026-07-24：数据库收敛为 SQLite
+
+- 删除 MySQL、PostgreSQL 的 GORM 驱动、DSN 生成、连接分支和依赖。
+- 数据库配置仅保留 SQLite 文件路径和表前缀。
+- 删除 MySQL、PostgreSQL 专用迁移、列名引用、全文索引和搜索语句。
+- SQLite 搜索统一使用原有的关键词 `LIKE` 查询。
+- 更新 README 与本文档，明确数据库仅支持 SQLite。
+
+本次实际验证：
+
+- 数据库启动、配置、数据访问及两个数据库搜索包的 Go 测试通过。
+- Go 1.26.4 成功生成静态链接的 Linux arm64 二进制。
+- 使用全新临时数据目录启动成功；生成的数据库配置仅包含 `db_file` 和
+  `table_prefix`，并创建了有效的 SQLite 3 数据库文件。
+- Go 源码、`go.mod` 和 `go.sum` 中不再引用 MySQL 或 PostgreSQL。
 
 ### 2026-07-24：Linux 专用部署与残留清理
 
@@ -220,7 +240,7 @@ go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox ./drive
 ## 上游升级步骤
 
 1. 创建升级分支并记录当前可用二进制与测试结果。
-2. 阅读上游从当前基线到目标版本的认证、路由、驱动和数据库变更。
+2. 阅读上游从当前基线到目标版本的认证、路由、驱动和 SQLite 变更。
 3. 合并后重新检查被删除的目录、路由、设置键和依赖没有恢复。
 4. 更新固定前端提交与词典，逐个重放并修正四个前端补丁。
 5. 构建前端并检查产物中没有已删除功能的入口或文案。
