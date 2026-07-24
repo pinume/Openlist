@@ -49,6 +49,10 @@ deleteKeys(home.local_settings, [
 ])
 await writeJSON("home.json", home)
 
+const login = await readJSON("login.json")
+login.title = "登录到 TinyList"
+await writeJSON("login.json", login)
+
 const manage = await readJSON("manage.json")
 manage.sidemenu = keepKeys(manage.sidemenu, [
   "profile",

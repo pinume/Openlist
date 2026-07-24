@@ -441,10 +441,11 @@ index b3c345d..a7d45c4 100644
      <!-- customize head -->
      <meta charset="utf-8" />
 @@ -19,6 +19,6 @@
-       href="https://res.oplist.org/logo/logo.svg"
+-      href="https://res.oplist.org/logo/logo.svg"
++      href="favicon.ico"
      />
 -    <title>Loading...</title>
-+    <title>加载中...</title>
++    <title>TinyList</title>
      <script>
        window.OPENLIST_CONFIG = {
          cdn: undefined,

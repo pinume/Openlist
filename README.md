@@ -1,6 +1,12 @@
-# OpenList Personal Server
+# TinyList
 
-面向个人与小团队的私有多用户文件服务器，基于 OpenList 裁剪。
+面向个人与小团队的私有多用户文件服务器，基于
+[OpenList](https://github.com/OpenListTeam/OpenList) 裁剪。
+
+## 上游项目
+
+- OpenList：https://github.com/OpenListTeam/OpenList
+- 本项目保留上游 Go 模块路径，以便持续同步代码并保持兼容。
 
 ## 功能范围
 

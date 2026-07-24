@@ -109,6 +109,9 @@ func initIndex(siteConfig SiteConfig) {
 func UpdateIndex() {
 	utils.Log.Debug("Updating index.html with settings...")
 	favicon := setting.GetStr(conf.Favicon)
+	if favicon == "" {
+		favicon = "favicon.ico"
+	}
 	logo := strings.Split(setting.GetStr(conf.Logo), "\n")[0]
 	title := setting.GetStr(conf.SiteTitle)
 	customizeHead := setting.GetStr(conf.CustomizeHead)

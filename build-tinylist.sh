@@ -4,12 +4,12 @@ set -euo pipefail
 
 host_os="$(go env GOHOSTOS)"
 if [[ "$host_os" != "linux" ]]; then
-  echo "OpenList Personal Server can only be built on Linux." >&2
+  echo "TinyList can only be built on Linux." >&2
   exit 1
 fi
 
 target_arch="${OPENLIST_GOARCH:-$(go env GOHOSTARCH)}"
-output="${1:-dist/openlist-linux-${target_arch}}"
+output="${1:-dist/tinylist-linux-${target_arch}}"
 built_at="${OPENLIST_BUILT_AT:-$(date -u +'%Y-%m-%dT%H:%M:%SZ')}"
 git_author="${OPENLIST_GIT_AUTHOR:-$(git log -1 --format='%an <%ae>')}"
 git_commit="${OPENLIST_GIT_COMMIT:-$(git rev-parse --short HEAD)}"
@@ -26,7 +26,7 @@ ldflags="\
 
 if [[ ! -f public/dist/index.html ]]; then
   echo "public/dist/index.html is missing." >&2
-  echo "Build the private OpenList frontend and place its output in public/dist first." >&2
+  echo "Build the TinyList frontend and place its output in public/dist first." >&2
   exit 1
 fi
 

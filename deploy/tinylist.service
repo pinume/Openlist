@@ -1,14 +1,14 @@
 [Unit]
-Description=OpenList Personal Server
+Description=TinyList Private File Server
 After=network-online.target
 Wants=network-online.target
 
 [Service]
 Type=simple
-User=openlist
-Group=openlist
-WorkingDirectory=/opt/openlist
-ExecStart=/opt/openlist/openlist server --data /opt/openlist/data
+User=tinylist
+Group=tinylist
+WorkingDirectory=/opt/tinylist
+ExecStart=/opt/tinylist/tinylist server --data /opt/tinylist/data
 Restart=on-failure
 RestartSec=5s
 TimeoutStopSec=10s
@@ -17,7 +17,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectHome=true
 ProtectSystem=strict
-ReadWritePaths=/opt/openlist/data
+ReadWritePaths=/opt/tinylist/data
 
 [Install]
 WantedBy=multi-user.target

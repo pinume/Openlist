@@ -11,10 +11,9 @@ import (
 )
 
 var RootCmd = &cobra.Command{
-	Use:   "openlist",
-	Short: "A file list program that supports multiple storage.",
-	Long: `A file list program that supports multiple storage,
-built with love by OpenListTeam.`,
+	Use:   "tinylist",
+	Short: "A private file server that supports multiple storage providers.",
+	Long:  "TinyList is a private multi-user file server based on OpenList.",
 }
 
 func Execute() {

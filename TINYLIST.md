@@ -1,13 +1,14 @@
-# OpenList Personal Server
+# TinyList
 
-这是一个面向私有多用户场景的 OpenList 精简版本。
+这是一个面向私有多用户场景的 TinyList 私有文件服务器，基于
+[OpenList](https://github.com/OpenListTeam/OpenList) 精简。
 
 ## 功能边界
 
 - 文件列表、文件详情、下载、预览、压缩包访问、WebDAV、FTP 和 SFTP 均要求认证。
 - 关闭公开分享、永久公开链接、匿名 FTP/SFTP 和游客 API 访问。
 - 仅包含 Local、Dropbox 和 S3 三种存储驱动。
-- Dropbox 与 S3 下载强制经过 OpenList 代理，使私有下载路由能够检查登录状态和用户根目录。
+- Dropbox 与 S3 下载强制经过 TinyList 代理，使私有下载路由能够检查登录状态和用户根目录。
 - 不包含离线下载和 Torrent 专用集成。
 - 管理端不包含分享、备份与还原、关于和文档入口。
 - 文件内的 PDF、Markdown、Office 等文档预览仍然保留。
@@ -16,7 +17,7 @@
 
 ## 用户隔离
 
-沿用 OpenList 现有用户模型：
+沿用上游 OpenList 的用户模型：
 
 - `role` 区分管理员和普通用户。
 - `base_path` 将用户限制在指定目录树中。
@@ -30,36 +31,36 @@
 Go 版本和工具链以 `go.mod` 为准。前端需要 Node.js、Corepack 和 Git。
 
 ```bash
-./build-frontend-personal.sh
+./build-frontend-tinylist.sh
 ```
 
 该脚本从固定的 OpenList-Frontend 上游提交构建，应用仓库中的
-`frontend-personal.patch`，并把产物放入 `public/dist`。
+前端裁剪补丁，并把产物放入 `public/dist`。
 
 随后构建原生 Linux 二进制：
 
 ```bash
-./build-personal.sh
+./build-tinylist.sh
 ```
 
 构建脚本只能在 Linux 上运行，并生成当前宿主架构的 Linux 二进制。在
-AArch64 主机上，输出为 `dist/openlist-linux-arm64`。
+AArch64 主机上，输出为 `dist/tinylist-linux-arm64`。
 
 ## Linux 安装
 
 创建服务账号和目录：
 
 ```bash
-sudo useradd --system --home /opt/openlist --shell /usr/sbin/nologin openlist
-sudo install -d -o openlist -g openlist -m 0750 /opt/openlist/data
-sudo install -o root -g root -m 0755 openlist /opt/openlist/openlist
-sudo install -o root -g root -m 0644 deploy/openlist.service /etc/systemd/system/openlist.service
+sudo useradd --system --home /opt/tinylist --shell /usr/sbin/nologin tinylist
+sudo install -d -o tinylist -g tinylist -m 0750 /opt/tinylist/data
+sudo install -o root -g root -m 0755 tinylist /opt/tinylist/tinylist
+sudo install -o root -g root -m 0644 deploy/tinylist.service /etc/systemd/system/tinylist.service
 ```
 
 首次启动会生成管理员密码，并且只输出到服务控制台。也可以提前指定：
 
 ```bash
-sudo systemctl edit openlist
+sudo systemctl edit tinylist
 ```
 
 ```ini
@@ -71,8 +72,8 @@ Environment=OPENLIST_ADMIN_PASSWORD=请替换为高强度密码
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable --now openlist
-sudo journalctl -u openlist -f
+sudo systemctl enable --now tinylist
+sudo journalctl -u tinylist -f
 ```
 
-首次启动会创建 `/opt/openlist/data/config.json`。默认 HTTP 监听地址为 `0.0.0.0:5244`。建议使用 Caddy 或 Nginx 提供 TLS，并通过主机防火墙限制外部直接访问 5244 端口。
+首次启动会创建 `/opt/tinylist/data/config.json`。默认 HTTP 监听地址为 `0.0.0.0:5244`。建议使用 Caddy 或 Nginx 提供 TLS，并通过主机防火墙限制外部直接访问 5244 端口。

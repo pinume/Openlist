@@ -242,5 +242,5 @@ func (u *User) WebAuthnCredentials() []webauthn.Credential {
 }
 
 func (u *User) WebAuthnIcon() string {
-	return "https://res.oplist.org/logo/logo.svg"
+	return ""
 }

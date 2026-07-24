@@ -9,12 +9,24 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
+	"github.com/OpenListTeam/OpenList/v4/public"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
 )
 
 func Favicon(c *gin.Context) {
-	c.Redirect(302, setting.GetStr(conf.Favicon))
+	favicon := setting.GetStr(conf.Favicon)
+	if favicon != "" {
+		c.Redirect(302, favicon)
+		return
+	}
+	logo, err := public.Public.ReadFile("tinylist.svg")
+	if err != nil {
+		common.ErrorResp(c, err, 500)
+		return
+	}
+	c.Header("Cache-Control", "public, max-age=86400")
+	c.Data(200, "image/svg+xml", logo)
 }
 
 func Robots(c *gin.Context) {

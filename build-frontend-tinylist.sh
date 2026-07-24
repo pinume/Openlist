@@ -62,4 +62,4 @@ mkdir -p "$repo_root/public/dist"
 find "$repo_root/public/dist" -mindepth 1 ! -name README.md -delete
 cp -a "$work_root/frontend/dist/." "$repo_root/public/dist/"
 
-echo "Built private frontend into $repo_root/public/dist"
+echo "Built TinyList frontend into $repo_root/public/dist"

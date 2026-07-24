@@ -27,7 +27,7 @@ type toolsListParams struct {
 var openListTools = []tool{
 	{
 		Name:        "openlist.fs.list",
-		Title:       "OpenList FS List",
+		Title:       "TinyList FS List",
 		Description: "List files and directories under a mount path that the current user can access.",
 		InputSchema: toolInputSchema{
 			Type: "object",
@@ -58,7 +58,7 @@ var openListTools = []tool{
 	},
 	{
 		Name:        "openlist.fs.get",
-		Title:       "OpenList FS Get",
+		Title:       "TinyList FS Get",
 		Description: "Get file or directory details for a mount path that the current user can access.",
 		InputSchema: toolInputSchema{
 			Type: "object",
@@ -77,7 +77,7 @@ var openListTools = []tool{
 	},
 	{
 		Name:        "openlist.fs.link",
-		Title:       "OpenList FS Link",
+		Title:       "TinyList FS Link",
 		Description: "Return usable link information for a file path that the current user can access.",
 		InputSchema: toolInputSchema{
 			Type: "object",
