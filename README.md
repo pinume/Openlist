@@ -14,13 +14,13 @@
 - 图片、音视频、PDF、Markdown、Office 等文件预览
 - WebDAV、FTP、SFTP
 - SQLite、MySQL、PostgreSQL
-- Linux `arm64` 单二进制部署
+- Linux 原生 `arm64` 单二进制部署
 
 移除：
 
 - 游客与匿名访问
 - 公开分享及分享链接
-- 离线下载、Aria2、qBittorrent、Transmission
+- 离线下载及相关下载工具
 - 配置备份与还原
 - 管理端“关于”和“文档”入口
 - 管理端设置、元信息、索引和任务导航入口
@@ -44,7 +44,8 @@
 ./build-personal.sh
 ```
 
-在当前 AArch64 主机上，输出位于 `dist/openlist-linux-arm64`。
+在当前 AArch64 主机上，输出位于 `dist/openlist-linux-arm64`。项目仅支持在
+Linux 上构建和原生部署。
 
 ## 运行
 
@@ -72,9 +73,17 @@ sudo systemctl enable --now openlist
 
 ## 前端维护
 
-前端构建固定到上游 OpenList-Frontend 的特定提交，并依次应用 [`frontend-personal.patch`](frontend-personal.patch)、[`frontend-chinese-ui.patch`](frontend-chinese-ui.patch) 和 [`frontend-size.patch`](frontend-size.patch)。构建脚本校验并提取同版本官方简体中文字典，其他语言、语言切换入口和旧浏览器兼容资源不会打包。更新上游前端时，应先确认补丁仍能应用，再完成 TypeScript 与生产构建检查。
+前端构建固定到上游 OpenList-Frontend 的特定提交，并依次应用
+[`frontend-personal.patch`](frontend-personal.patch)、
+[`frontend-chinese-ui.patch`](frontend-chinese-ui.patch)、
+[`frontend-size.patch`](frontend-size.patch) 和
+[`frontend-aria2-removal.patch`](frontend-aria2-removal.patch)。构建脚本校验并提取
+同版本官方简体中文字典，其他语言、语言切换入口、离线下载工具残留和旧浏览器兼容
+资源不会打包。更新上游前端时，应先确认补丁仍能应用，再完成 TypeScript 与生产
+构建检查。
 
 更完整的部署说明见 [`PERSONAL_SERVER.md`](PERSONAL_SERVER.md)。
+精简边界、升级流程和验证清单见 [`MAINTENANCE.md`](MAINTENANCE.md)。
 
 ## License
 

@@ -1,0 +1,37 @@
+diff --git a/src/store/local_settings.ts b/src/store/local_settings.ts
+index 275952c..13ff6c4 100644
+--- a/src/store/local_settings.ts
++++ b/src/store/local_settings.ts
+@@ -12,12 +12,4 @@ const [local, setLocal, { remove, clear, toJSON }] = createLocalStorage()
+ export const initialLocalSettings = [
+-  {
+-    key: "aria2_rpc_url",
+-    default: "http://localhost:6800/jsonrpc",
+-  },
+-  {
+-    key: "aria2_rpc_secret",
+-    default: "",
+-  },
+   {
+     key: "global_default_layout",
+     default: "list",
+diff --git a/src/types/setting.ts b/src/types/setting.ts
+index f40d482..c710158 100644
+--- a/src/types/setting.ts
++++ b/src/types/setting.ts
+@@ -3,14 +3,13 @@ import { Type } from "."
+ export enum Group {
+   SINGLE,
+   SITE,
+   STYLE,
+   PREVIEW,
+   GLOBAL,
+-  ARIA2,
+-  INDEX,
++  INDEX = 6,
+   SSO,
+   LDAP,
+   S3,
+   FTP,
+   TRAFFIC,
+ }

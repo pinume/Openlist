@@ -10,7 +10,6 @@ import (
 	"os/user"
 	"path"
 	"path/filepath"
-	"runtime"
 	"strings"
 
 	d "github.com/OpenListTeam/OpenList/v4/pkg/gowebdav"
@@ -79,12 +78,7 @@ func getHome() string {
 		return u.HomeDir
 	}
 
-	switch runtime.GOOS {
-	case "windows":
-		return ""
-	default:
-		return "~/"
-	}
+	return "~/"
 }
 
 func getCmd(method string) func(c *d.Client, p0, p1 string) error {

@@ -1,4 +1,4 @@
-name: Test Build
+name: Linux Build
 
 on:
   pull_request:
@@ -11,65 +11,36 @@ concurrency:
 
 jobs:
   build:
-    strategy:
-      matrix:
-        target:
-          - darwin-amd64
-          - darwin-arm64
-          - windows-amd64
-          - linux-arm64-musl
-          - linux-amd64-musl
-          - windows-arm64
-          - android-arm64
-    name: Build ${{ matrix.target }}
+    name: Build Linux arm64
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
-      - uses: benjlevesque/short-sha@dbe07338b37c456ce06d23409b35a56a7815eef4 # v4.0
-        id: short-sha
 
       - name: Setup Go
         uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7
         with:
           go-version: "1.26.4"
 
-      - name: Setup web
-        run: bash build.sh dev web
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          FRONTEND_REPO: ${{ vars.FRONTEND_REPO }}
-
-      - name: Build
-        uses: OpenListTeam/cgo-actions@v1.2.5
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
         with:
-          targets: ${{ matrix.target }}
-          flags: ${{ contains(matrix.target, '-musl') && '-ldflags=-linkmode external -extldflags ''-static -fpic''' || '-ldflags=' }}
-          static-link-for-musl: true
-          musl-target-format: $os-$musl-$arch
-          github-token: ${{ secrets.GITHUB_TOKEN }}
-          out-dir: build
-          x-flags: |
-            github.com/OpenListTeam/OpenList/v4/internal/conf.BuiltAt=$built_at
-            github.com/OpenListTeam/OpenList/v4/internal/conf.GitAuthor=The OpenList Projects Contributors <noreply@openlist.team>
-            github.com/OpenListTeam/OpenList/v4/internal/conf.GitCommit=$git_commit
-            github.com/OpenListTeam/OpenList/v4/internal/conf.Version=$tag
-            github.com/OpenListTeam/OpenList/v4/internal/conf.WebVersion=rolling
-          output: openlist$ext
+          node-version: "22"
 
-      - name: Verify musl binary is static
-        if: contains(matrix.target, '-musl')
-        run: |
-          set -e
-          if readelf -l build/openlist | grep -q "Requesting program interpreter"; then
-            echo "Dynamic binary detected: build/openlist"
-            readelf -l build/openlist | grep "Requesting program interpreter" || true
-            exit 1
-          fi
+      - name: Enable Corepack
+        run: corepack enable
+
+      - name: Build frontend
+        run: ./build-frontend-personal.sh
+
+      - name: Build Linux binary
+        run: ./build-personal.sh
+        env:
+          OPENLIST_GOARCH: arm64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v7
         with:
-          name: openlist_${{ steps.short-sha.outputs.sha }}_${{ matrix.target }}
-          path: build/*
+          name: openlist-linux-arm64
+          path: dist/openlist-linux-arm64
+          if-no-files-found: error

@@ -42,8 +42,8 @@ Go 版本和工具链以 `go.mod` 为准。前端需要 Node.js、Corepack 和 G
 ./build-personal.sh
 ```
 
-构建脚本只生成当前宿主架构的 Linux 二进制。在 AArch64 主机上，输出为
-`dist/openlist-linux-arm64`。
+构建脚本只能在 Linux 上运行，并生成当前宿主架构的 Linux 二进制。在
+AArch64 主机上，输出为 `dist/openlist-linux-arm64`。
 
 ## Linux 安装
 

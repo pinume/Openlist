@@ -36,7 +36,6 @@ To keep your OpenList instance secure:
 - Limit exposed ports using a reverse proxy (e.g., Nginx, Caddy).
 - Set up access controls and avoid enabling guest access unless necessary.
 - Regularly review mounted storage permissions and revoke unused API tokens.
-- When using Docker, avoid running the container as root if possible.
 
 ## Acknowledgments
 
@@ -82,7 +81,6 @@ We sincerely thank all security researchers and community members who responsibl
 - 使用反向代理（如 Nginx、Caddy）限制对外暴露的端口。
 - 配置访问控制，非必要情况下不要开启访客访问。
 - 定期检查已挂载存储的权限，并撤销未使用的 API 令牌。
-- 使用 Docker 部署时，尽可能避免以 root 用户运行容器。
 
 ## 致谢
 

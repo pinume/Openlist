@@ -16,6 +16,7 @@ trap cleanup EXIT
 
 command -v git >/dev/null
 command -v curl >/dev/null
+command -v grep >/dev/null
 command -v sha256sum >/dev/null
 command -v tar >/dev/null
 command -v node >/dev/null
@@ -27,10 +28,13 @@ git -C "$work_root/frontend" switch --detach "$frontend_commit"
 git -C "$work_root/frontend" apply "$repo_root/frontend-personal.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-chinese-ui.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-size.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-aria2-removal.patch"
 
 curl -fsSL "$i18n_url" -o "$work_root/i18n.tar.gz"
 printf '%s  %s\n' "$i18n_sha256" "$work_root/i18n.tar.gz" | sha256sum --check -
 tar -xzf "$work_root/i18n.tar.gz" -C "$work_root/frontend/src/lang" ./zh-CN
+node "$repo_root/scripts/prune-frontend-i18n.mjs" \
+  "$work_root/frontend/src/lang/zh-CN"
 find "$work_root/frontend/src/lang/en" -depth -delete
 
 (
@@ -42,6 +46,16 @@ find "$work_root/frontend/src/lang/en" -depth -delete
     ! -name 'nls.messages.js.js' \
     ! -name 'nls.messages.zh-cn.js.js' \
     -delete
+  if LC_ALL=C grep -Rqi -- "aria2" dist ||
+    LC_ALL=C grep -Eqi -- \
+      "offline_download|qbittorrent|transmission" dist/assets/store-*.js; then
+    echo "Removed feature code was found in the frontend build." >&2
+    LC_ALL=C grep -Ril -- "aria2" dist >&2 || true
+    LC_ALL=C grep -Eil -- \
+      "offline_download|qbittorrent|transmission" dist/assets/store-*.js \
+      >&2 || true
+    exit 1
+  fi
 )
 
 mkdir -p "$repo_root/public/dist"

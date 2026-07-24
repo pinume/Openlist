@@ -8,7 +8,6 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
-	"runtime"
 	"slices"
 	"sort"
 	"strconv"
@@ -27,8 +26,7 @@ import (
 const thumbPrefix = "openlist_thumb_"
 
 func isSymlinkDir(f fs.FileInfo, path string) bool {
-	if f.Mode()&os.ModeSymlink == os.ModeSymlink ||
-		(runtime.GOOS == "windows" && f.Mode()&os.ModeIrregular == os.ModeIrregular) { // os.ModeIrregular is Junction bit in Windows
+	if f.Mode()&os.ModeSymlink == os.ModeSymlink {
 		dst, err := os.Readlink(filepath.Join(path, f.Name()))
 		if err != nil {
 			return false

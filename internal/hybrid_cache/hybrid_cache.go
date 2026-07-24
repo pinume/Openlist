@@ -219,7 +219,7 @@ func NewHybridCache(blockSize, maxMemorySize uint64) (hc *HybridCache, err error
 		// 策略2: 手动内存管理
 		if maxMemorySize >= blockSize {
 			var m mem.LinearMemory
-			// 手动管理内存，Uinx Mmap 或者 Windows VirtualAlloc
+			// 使用 Linux mmap 手动管理内存
 			if m, err = mem.NewGuardedMemory(blockSize, maxMemorySize); err == nil {
 				hc = &HybridCache{memoryStore: m, blockSize: blockSize}
 			}
