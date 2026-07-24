@@ -44,6 +44,27 @@ func Down(verifyFunc func(string, string) error) func(c *gin.Context) {
 	}
 }
 
+// UserPathAccess prevents authenticated users from bypassing their base path or
+// per-directory read restrictions by crafting a direct download URL.
+func UserPathAccess(c *gin.Context) {
+	user, ok := c.Request.Context().Value(conf.UserKey).(*model.User)
+	if !ok || user == nil {
+		common.ErrorPage(c, errs.PermissionDenied, 401)
+		return
+	}
+	rawPath := c.Request.Context().Value(conf.PathKey).(string)
+	if !utils.IsSubPath(user.BasePath, rawPath) {
+		common.ErrorPage(c, errs.PermissionDenied, 403)
+		return
+	}
+	meta, _ := c.Request.Context().Value(conf.MetaKey).(*model.Meta)
+	if meta != nil && !common.CanAccess(user, meta, rawPath, meta.Password) {
+		common.ErrorPage(c, errs.PermissionDenied, 403)
+		return
+	}
+	c.Next()
+}
+
 // TODO: implement
 // path maybe contains # ? etc.
 func parsePath(path string) string {

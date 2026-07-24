@@ -66,8 +66,6 @@ type TaskConfig struct {
 }
 
 type TasksConfig struct {
-	Download           TaskConfig `json:"download" envPrefix:"DOWNLOAD_"`
-	Transfer           TaskConfig `json:"transfer" envPrefix:"TRANSFER_"`
 	Upload             TaskConfig `json:"upload" envPrefix:"UPLOAD_"`
 	Copy               TaskConfig `json:"copy" envPrefix:"COPY_"`
 	Move               TaskConfig `json:"move" envPrefix:"MOVE_"`
@@ -189,16 +187,6 @@ func DefaultConfig(dataDir string) *Config {
 		MaxConcurrency:        64,
 		TlsInsecureSkipVerify: false,
 		Tasks: TasksConfig{
-			Download: TaskConfig{
-				Workers:  5,
-				MaxRetry: 1,
-				// TaskPersistant: true,
-			},
-			Transfer: TaskConfig{
-				Workers:  5,
-				MaxRetry: 2,
-				// TaskPersistant: true,
-			},
 			Upload: TaskConfig{
 				Workers: 5,
 			},

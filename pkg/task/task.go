@@ -1,4 +1,4 @@
-// Package task manage task, such as file upload, file copy between storages, offline download, etc.
+// Package task manages asynchronous file operations.
 package task
 
 import (

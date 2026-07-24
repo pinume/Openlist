@@ -1,0 +1,4486 @@
+diff --git a/src/app/App.tsx b/src/app/App.tsx
+index fcc5b25..4071380 100644
+--- a/src/app/App.tsx
++++ b/src/app/App.tsx
+@@ -16,7 +16,7 @@ import { setSettings } from "~/store"
+ import { setArchiveExtensions } from "~/store/archive"
+ import { Resp } from "~/types"
+ import { base_path, bus, handleRespWithoutAuthAndNotify, r } from "~/utils"
+-import { MustUser, UserOrGuest } from "./MustUser"
++import { MustUser } from "./MustUser"
+ import "./index.css"
+ import { globalStyles } from "./theme"
+ 
+@@ -91,14 +91,6 @@ const App: Component = () => {
+                 </MustUser>
+               }
+             />
+-            <Route
+-              path={["/@s/*", "/%40s/*"]}
+-              element={
+-                <UserOrGuest>
+-                  <Home />
+-                </UserOrGuest>
+-              }
+-            />
+             <Route
+               path="*"
+               element={
+diff --git a/src/app/MustUser.tsx b/src/app/MustUser.tsx
+index baec9e0..3807c9a 100644
+--- a/src/app/MustUser.tsx
++++ b/src/app/MustUser.tsx
+@@ -3,7 +3,7 @@ import { Error, FullScreenLoading } from "~/components"
+ import { useFetch, useT } from "~/hooks"
+ import { Me, setMe } from "~/store"
+ import { PResp } from "~/types"
+-import { r, handleResp, handleRespWithoutAuthAndNotify } from "~/utils"
++import { r, handleResp } from "~/utils"
+ 
+ const MustUser = (props: { children: JSXElement }) => {
+   const t = useT()
+@@ -24,34 +24,4 @@ const MustUser = (props: { children: JSXElement }) => {
+   )
+ }
+ 
+-const UserOrGuest = (props: { children: JSXElement }) => {
+-  // 将loading默认设置为true，修复children被提前渲染，明显症状：两个公告
+-  const [loading, data] = useFetch((): PResp<Me> => r.get("/me"), true)
+-  const [skipLogin, setSkipLogin] = createSignal(false)
+-  onMount(async () => {
+-    handleRespWithoutAuthAndNotify(await data(), setMe, (_msg, _code) => {
+-      setMe({
+-        id: 2,
+-        username: "guest",
+-        password: "",
+-        base_path: "/",
+-        role: 1,
+-        disabled: false,
+-        permission: 0,
+-        sso_id: "",
+-        otp: false,
+-        allow_ldap: false,
+-      })
+-      setSkipLogin(true)
+-    })
+-  })
+-  return (
+-    <Switch fallback={props.children}>
+-      <Match when={!skipLogin() && loading()}>
+-        <FullScreenLoading />
+-      </Match>
+-    </Switch>
+-  )
+-}
+-
+-export { MustUser, UserOrGuest }
++export { MustUser }
+diff --git a/src/hooks/useDownload.ts b/src/hooks/useDownload.ts
+index df755a1..9c7f005 100644
+--- a/src/hooks/useDownload.ts
++++ b/src/hooks/useDownload.ts
+@@ -1,46 +1,11 @@
+-import axios from "axios"
+-import { local, password, selectedObjs as _selectedObjs } from "~/store"
+-import { fsList, notify, pathBase, pathJoin } from "~/utils"
+-import { getLinkByDirAndObj, useRouter, useT } from "~/hooks"
++import { selectedObjs as _selectedObjs } from "~/store"
++import { pathBase } from "~/utils"
++import { useRouter, useT } from "~/hooks"
+ import { useSelectedLink } from "~/hooks"
+-import { Obj } from "~/types"
+-
+-interface File {
+-  path: string
+-  dir: string
+-  url: string
+-  name: string
+-}
+-
+-function isEmpty(value: string | object): boolean {
+-  return value === undefined || value === null || value === ""
+-}
+-function isNullOrUndefined(value: string | object): boolean {
+-  return value === undefined || value === null
+-}
+-
+-async function getSaveDir(rpc_url: string, rpc_secret: string) {
+-  let save_dir: string = "/downloads/openlist"
+-
+-  const resp = await axios.post(rpc_url, {
+-    id: Math.random().toString(),
+-    jsonrpc: "2.0",
+-    method: "aria2.getGlobalOption",
+-    params: ["token:" + (rpc_secret ?? "")],
+-  })
+-  console.log(resp)
+-  if (resp.status === 200) {
+-    if (!isEmpty(resp.data.result.dir)) {
+-      save_dir = resp.data.result.dir
+-    }
+-    save_dir = save_dir.endsWith("/") ? save_dir.slice(0, -1) : save_dir
+-  }
+-  return save_dir
+-}
+ export const useDownload = () => {
+   const { rawLinks } = useSelectedLink()
+   const t = useT()
+-  const { pathname, isShare } = useRouter()
++  const { pathname } = useRouter()
+   return {
+     batchDownloadSelected: () => {
+       const urls = rawLinks(true)
+@@ -48,118 +13,6 @@ export const useDownload = () => {
+         window.open(url, "_blank")
+       })
+     },
+-    sendToAria2: async () => {
+-      const selectedObjs = _selectedObjs()
+-      const fetchFolderStructure = async (
+-        pre: string,
+-        obj: Obj,
+-      ): Promise<File[] | string> => {
+-        if (!obj.is_dir) {
+-          return [
+-            {
+-              path: pathJoin(pre, obj.name),
+-              dir: pre,
+-              url: getLinkByDirAndObj(
+-                pathJoin(pathname(), pre),
+-                obj,
+-                "direct",
+-                isShare(),
+-                true,
+-              ),
+-              name: obj.name,
+-            },
+-          ]
+-        } else {
+-          const resp = await fsList(
+-            pathJoin(pathname(), pre, obj.name),
+-            password(),
+-          )
+-          if (resp.code !== 200) {
+-            return resp.message
+-          }
+-          const res: File[] = []
+-          for (const _obj of resp.data.content ?? []) {
+-            const _res = await fetchFolderStructure(
+-              pathJoin(pre, obj.name),
+-              _obj,
+-            )
+-            if (typeof _res === "string") {
+-              return _res
+-            } else {
+-              res.push(..._res)
+-            }
+-          }
+-          return res
+-        }
+-      }
+-      const { aria2_rpc_url, aria2_rpc_secret } = local
+-      if (!aria2_rpc_url) {
+-        notify.warning(t("home.toolbar.aria2_not_set"))
+-        return
+-      }
+-      try {
+-        let save_dir = "/downloads/openlist"
+-        // TODO: select dir, but it seems there is no way to get the full path
+-        // if (window.showDirectoryPicker) {
+-        //   const dirHandle = await window.showDirectoryPicker()
+-        //   save_dir = dirHandle.name
+-        //   console.log(dirHandle)
+-        //   return
+-        // }
+-        save_dir = await getSaveDir(aria2_rpc_url, aria2_rpc_secret)
+-        let isStartAria2Mission = false
+-        notify.info(`${t("home.package_download.fetching_struct")}`)
+-        for (const obj of selectedObjs) {
+-          const res = await fetchFolderStructure("", obj)
+-
+-          if (typeof res !== "object" || res.length === undefined) {
+-            notify.error(
+-              `${t("home.package_download.fetching_struct_failed")}: ${res}`,
+-            )
+-            return res
+-          } else {
+-            for (let key = 0; key < res.length; key++) {
+-              if (
+-                isEmpty(res[key].path) ||
+-                isNullOrUndefined(res[key].dir) ||
+-                isEmpty(res[key].url) ||
+-                isEmpty(res[key].name)
+-              ) {
+-                notify.error(
+-                  `${t(
+-                    "home.package_download.fetching_struct_failed",
+-                  )}: ${JSON.stringify(res[key])}`,
+-                )
+-                continue
+-              }
+-              if (!isStartAria2Mission) {
+-                isStartAria2Mission = true
+-                notify.info(`${t("home.package_download.downloading")}`)
+-              }
+-              const resp = await axios.post(aria2_rpc_url, {
+-                id: Math.random().toString(),
+-                jsonrpc: "2.0",
+-                method: "aria2.addUri",
+-                params: [
+-                  "token:" + (aria2_rpc_secret ?? ""),
+-                  [res[key].url],
+-                  {
+-                    out: res[key].name,
+-                    dir: save_dir + res[key].dir,
+-                    "check-certificate": "false",
+-                  },
+-                ],
+-              })
+-              console.log(resp)
+-            }
+-          }
+-        }
+-        notify.success(t("home.toolbar.send_aria2_success"))
+-      } catch (e) {
+-        console.error(e)
+-        notify.error(`failed to send to aria2: ${e}`)
+-      }
+-    },
+     playlistDownloadSelected: () => {
+       const selectedObjs = _selectedObjs().filter((obj) => !obj.is_dir)
+       let saveName = pathBase(pathname())
+diff --git a/src/pages/home/folder/context-menu.tsx b/src/pages/home/folder/context-menu.tsx
+index ee8049f..6b02206 100644
+--- a/src/pages/home/folder/context-menu.tsx
++++ b/src/pages/home/folder/context-menu.tsx
+@@ -4,7 +4,7 @@ import "solid-contextmenu/dist/style.css"
+ import { HStack, Icon, Text, useColorMode, Image } from "@hope-ui/solid"
+ import { operations } from "../toolbar/operations"
+ import { createMemo, For, Show } from "solid-js"
+-import { bus, convertURL, notify, torrentParse } from "~/utils"
++import { bus, convertURL, notify } from "~/utils"
+ import { ObjType, UserMethods } from "~/types"
+ import {
+   getSettingBool,
+@@ -19,7 +19,6 @@ import { players } from "../previews/video_box"
+ import { getPreviews } from "../previews"
+ import { BsPlayCircleFill } from "solid-icons/bs"
+ import { isArchive } from "~/store/archive"
+-import axios from "axios"
+ 
+ const ItemContent = (props: { name: string }) => {
+   const t = useT()
+@@ -40,8 +39,7 @@ export const ContextMenu = () => {
+   const t = useT()
+   const { colorMode } = useColorMode()
+   const { copySelectedRawLink, copySelectedPreviewPage } = useCopyLink()
+-  const { batchDownloadSelected, sendToAria2, playlistDownloadSelected } =
+-    useDownload()
++  const { batchDownloadSelected, playlistDownloadSelected } = useDownload()
+   const canPackageDownload = () => {
+     return UserMethods.is_admin(me()) || getSettingBool("package_download")
+   }
+@@ -89,14 +87,6 @@ export const ContextMenu = () => {
+           </Item>
+         )}
+       </For>
+-      <Item
+-        hidden={!userCan("share") || isShare()}
+-        onClick={() => {
+-          bus.emit("tool", "share")
+-        }}
+-      >
+-        <ItemContent name="share" />
+-      </Item>
+       <Item
+         hidden={() => {
+           return (
+@@ -113,51 +103,6 @@ export const ContextMenu = () => {
+       >
+         <ItemContent name="decompress" />
+       </Item>
+-      <Item
+-        hidden={() => {
+-          return (
+-            isShare() ||
+-            !userCan("offline_download") ||
+-            !objStore.write ||
+-            !oneChecked() ||
+-            selectedObjs().some((o) => o.is_dir) ||
+-            !selectedObjs().every((o) =>
+-              o.name.toLowerCase().endsWith(".torrent"),
+-            )
+-          )
+-        }}
+-        onClick={async () => {
+-          const obj = selectedObjs()[0]
+-          if (!obj) return
+-          try {
+-            // 获取 torrent 文件的下载链接并下载内容
+-            const link = rawLink(obj, false)
+-            const resp = await axios.get(link, { responseType: "arraybuffer" })
+-            const buffer = resp.data as ArrayBuffer
+-            const bytes = new Uint8Array(buffer)
+-            let binary = ""
+-            for (let i = 0; i < bytes.byteLength; i++) {
+-              binary += String.fromCharCode(bytes[i])
+-            }
+-            const base64Data = btoa(binary)
+-
+-            // 调用解析 API
+-            const parseResp = await torrentParse(base64Data)
+-            if (parseResp.code === 200) {
+-              bus.emit("torrent_parsed", {
+-                torrentData: base64Data,
+-                info: parseResp.data,
+-              })
+-            } else {
+-              notify.error(parseResp.message || "解析 torrent 失败")
+-            }
+-          } catch (err) {
+-            notify.error(`解析 torrent 失败: ${err}`)
+-          }
+-        }}
+-      >
+-        <ItemContent name="offline_download_torrent" />
+-      </Item>
+       <Show when={oneChecked()}>
+         <Item
+           onClick={({ props }) => {
+@@ -254,7 +199,6 @@ export const ContextMenu = () => {
+               {t("home.toolbar.playlist_download")}
+             </Item>
+           </Show>
+-          <Item onClick={sendToAria2}>{t("home.toolbar.send_aria2")}</Item>
+         </Submenu>
+       </Show>
+     </Menu>
+diff --git a/src/pages/home/previews/archive.tsx b/src/pages/home/previews/archive.tsx
+index b03f3d7..b6e9707 100644
+--- a/src/pages/home/previews/archive.tsx
++++ b/src/pages/home/previews/archive.tsx
+@@ -37,7 +37,7 @@ import {
+   Obj,
+   ObjTree,
+   UserMethods,
+-  UserPermissions,
++  UserPermissionBits,
+   ObjType,
+   ArchiveObj,
+   Resp,
+@@ -201,10 +201,10 @@ const ContextMenu = () => {
+       </Item>
+       <Item
+         hidden={() => {
+-          const index = UserPermissions.findIndex(
+-            (item) => item === "decompress",
++          return (
++            !isShare() &&
++            !UserMethods.can(me(), UserPermissionBits.decompress)
+           )
+-          return !isShare() && !UserMethods.can(me(), index)
+         }}
+         onClick={({ props }) => {
+           bus.emit(
+diff --git a/src/pages/home/previews/index.ts b/src/pages/home/previews/index.ts
+index 687133f..521b0a1 100644
+--- a/src/pages/home/previews/index.ts
++++ b/src/pages/home/previews/index.ts
+@@ -1,6 +1,12 @@
+ import { Component, lazy } from "solid-js"
+ import { getIframePreviews, me, getSettingBool, isArchive } from "~/store"
+-import { Obj, ObjType, UserMethods, UserPermissions, ArchiveObj } from "~/types"
++import {
++  Obj,
++  ObjType,
++  UserMethods,
++  UserPermissionBits,
++  ArchiveObj,
++} from "~/types"
+ import { ext } from "~/utils"
+ import { generateIframePreview } from "./iframe"
+ import { useRouter, useT } from "~/hooks"
+@@ -170,11 +176,12 @@ const previews: Preview[] = [
+   {
+     key: "archive",
+     exts: (name: string) => {
+-      const index = UserPermissions.findIndex(
+-        (item) => item === "read_archives",
+-      )
+       const { isShare } = useRouter()
+-      if (!isShare() && !UserMethods.can(me(), index)) return false
++      if (
++        !isShare() &&
++        !UserMethods.can(me(), UserPermissionBits.read_archives)
++      )
++        return false
+       if (isShare() && !getSettingBool("share_archive_preview")) return false
+       return isArchive(name)
+     },
+diff --git a/src/pages/home/previews/torrent.tsx b/src/pages/home/previews/torrent.tsx
+index 8bbaf5c..eae1941 100644
+--- a/src/pages/home/previews/torrent.tsx
++++ b/src/pages/home/previews/torrent.tsx
+@@ -2,16 +2,13 @@ import {
+   VStack,
+   HStack,
+   Text,
+-  Button,
+   Badge,
+   Heading,
+-  Box,
+ } from "@hope-ui/solid"
+ import { createSignal, onMount, Show } from "solid-js"
+ import { objStore } from "~/store"
+ import { TorrentInfo, CASInfo, TorrentFile } from "~/types"
+-import { useLink, useRouter, useT } from "~/hooks"
+-import { bus } from "~/utils"
++import { useLink, useT } from "~/hooks"
+ import { TorrentFileList } from "../toolbar/TorrentFileList"
+ import axios from "axios"
+ import bencode from "bencode"
+@@ -30,15 +27,6 @@ function utf8Decode(data: Uint8Array | undefined): string {
+   return crypto.enc.Utf8.stringify(crypto.lib.WordArray.create(data))
+ }
+ 
+-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+-  const bytes = new Uint8Array(buffer)
+-  let binary = ""
+-  for (let i = 0; i < bytes.byteLength; i++) {
+-    binary += String.fromCharCode(bytes[i])
+-  }
+-  return btoa(binary)
+-}
+-
+ // 本地解析 torrent 文件，避免调用后端API
+ // 与后端 ParseTorrent 行为对齐：返回 TorrentInfo 结构 + 检测 x-cas 扩展
+ function parseLocalTorrent(buffer: Uint8Array): TorrentInfo {
+@@ -115,12 +103,10 @@ function parseLocalTorrent(buffer: Uint8Array): TorrentInfo {
+ const TorrentPreview = () => {
+   const t = useT()
+   const { proxyLink, rawLink } = useLink()
+-  const { isShare } = useRouter()
+ 
+   const [loading, setLoading] = createSignal(true)
+   const [error, setError] = createSignal("")
+   const [torrentInfo, setTorrentInfo] = createSignal<TorrentInfo | null>(null)
+-  const [torrentData, setTorrentData] = createSignal("") // Base64 编码
+   const [selectedFiles, setSelectedFiles] = createSignal<number[]>([])
+ 
+   onMount(async () => {
+@@ -142,7 +128,6 @@ const TorrentPreview = () => {
+       // 本地 bencode 解析（避免调用后端 API 出现 403）
+       const info = parseLocalTorrent(bytes)
+       setTorrentInfo(info)
+-      setTorrentData(arrayBufferToBase64(buffer))
+       setSelectedFiles(info.files.map((_, i) => i))
+     } catch (err) {
+       console.error("Failed to parse torrent file:", err)
+@@ -154,17 +139,6 @@ const TorrentPreview = () => {
+     }
+   })
+ 
+-  // 触发离线下载对话框（完全复用 OfflineDownloadEnhanced）
+-  const handleOfflineDownload = () => {
+-    const info = torrentInfo()
+-    const data = torrentData()
+-    if (!info || !data) return
+-    bus.emit("torrent_parsed", {
+-      torrentData: data,
+-      info: info,
+-    })
+-  }
+-
+   return (
+     <VStack spacing="$4" w="$full" p="$4">
+       <Show when={loading()}>
+@@ -219,18 +193,6 @@ const TorrentPreview = () => {
+             onSelectionChange={setSelectedFiles}
+           />
+ 
+-          {/* 离线下载按钮 */}
+-          <Show when={!isShare()}>
+-            <Box mt="$2">
+-              <Button
+-                colorScheme="primary"
+-                onClick={handleOfflineDownload}
+-                disabled={!torrentInfo()}
+-              >
+-                {t("home.toolbar.offline_download")}
+-              </Button>
+-            </Box>
+-          </Show>
+         </VStack>
+       </Show>
+     </VStack>
+diff --git a/src/pages/home/toolbar/Center.tsx b/src/pages/home/toolbar/Center.tsx
+index 2de7687..cc89ba0 100644
+--- a/src/pages/home/toolbar/Center.tsx
++++ b/src/pages/home/toolbar/Center.tsx
+@@ -13,7 +13,6 @@ import { CenterIcon } from "./Icon"
+ import { bus } from "~/utils"
+ import { Download } from "./Download"
+ import { Motion, Presence } from "solid-motionone"
+-import { useRouter } from "~/hooks"
+ 
+ export const Center = () => {
+   const show = createMemo(
+@@ -22,7 +21,6 @@ export const Center = () => {
+       checkboxOpen() &&
+       haveSelected(),
+   )
+-  const { isShare } = useRouter()
+   return (
+     <Presence exitBeforeEnter>
+       <Show when={show()}>
+@@ -53,7 +51,7 @@ export const Center = () => {
+                 backdropFilter: "blur(8px)",
+               }}
+             >
+-              <Show when={!isShare() && objStore.write}>
++              <Show when={objStore.write}>
+                 <For
+                   each={
+                     ["rename", "move", "copy", "delete", "decompress"] as const
+@@ -71,14 +69,6 @@ export const Center = () => {
+                   }}
+                 </For>
+               </Show>
+-              <Show when={userCan("share") && !isShare()}>
+-                <CenterIcon
+-                  name="share"
+-                  onClick={() => {
+-                    bus.emit("tool", "share")
+-                  }}
+-                />
+-              </Show>
+               <CopyLink />
+               <Download />
+               <CenterIcon
+diff --git a/src/pages/home/toolbar/Download.tsx b/src/pages/home/toolbar/Download.tsx
+index 745b2a6..04a22db 100644
+--- a/src/pages/home/toolbar/Download.tsx
++++ b/src/pages/home/toolbar/Download.tsx
+@@ -23,8 +23,7 @@ import { CenterIcon } from "./Icon"
+ export const Download = () => {
+   const t = useT()
+   const colorScheme = "neutral"
+-  const { batchDownloadSelected, sendToAria2, playlistDownloadSelected } =
+-    useDownload()
++  const { batchDownloadSelected, playlistDownloadSelected } = useDownload()
+   return (
+     <Menu placement="top" offset={10}>
+       <MenuTrigger as={CenterIcon} name="download" />
+@@ -52,9 +51,6 @@ export const Download = () => {
+             {t("home.toolbar.playlist_download")}
+           </MenuItem>
+         </Show>
+-        <MenuItem colorScheme={colorScheme} onSelect={sendToAria2}>
+-          {t("home.toolbar.send_aria2")}
+-        </MenuItem>
+       </MenuContent>
+     </Menu>
+   )
+diff --git a/src/pages/home/toolbar/Icon.tsx b/src/pages/home/toolbar/Icon.tsx
+index f835492..f545d07 100644
+--- a/src/pages/home/toolbar/Icon.tsx
++++ b/src/pages/home/toolbar/Icon.tsx
+@@ -2,7 +2,7 @@ import { ElementType, Icon, IconProps, Tooltip } from "@hope-ui/solid"
+ import { IconTypes } from "solid-icons"
+ import { useT } from "~/hooks"
+ import { getMainColor, me } from "~/store"
+-import { UserMethods, UserPermissions } from "~/types"
++import { UserMethods, UserPermissionBits } from "~/types"
+ import { hoverColor } from "~/utils"
+ import { operations } from "./operations"
+ 
+@@ -11,8 +11,8 @@ export const CenterIcon = <C extends ElementType = "svg">(
+     name: string
+   },
+ ) => {
+-  const index = UserPermissions.findIndex((p) => p === props.name)
+-  if (index !== -1 && !UserMethods.can(me(), index)) return null
++  const index = UserPermissionBits[props.name as keyof typeof UserPermissionBits]
++  if (index !== undefined && !UserMethods.can(me(), index)) return null
+   const t = useT()
+   return (
+     <Tooltip placement="top" withArrow label={t(`home.toolbar.${props.name}`)}>
+diff --git a/src/pages/home/toolbar/OfflineDownload.tsx b/src/pages/home/toolbar/OfflineDownload.tsx
+deleted file mode 100644
+index 7eaa679..0000000
+--- a/src/pages/home/toolbar/OfflineDownload.tsx
++++ /dev/null
+@@ -1,170 +0,0 @@
+-import { Box, createDisclosure } from "@hope-ui/solid"
+-import { ModalInput, SelectWrapper } from "~/components"
+-import { useFetch, useRouter, useT } from "~/hooks"
+-import {
+-  offlineDownload,
+-  bus,
+-  handleRespWithNotifySuccess,
+-  r,
+-  handleResp,
+-} from "~/utils"
+-import { createSignal, onCleanup, onMount } from "solid-js"
+-import { PResp } from "~/types"
+-import bencode from "bencode"
+-import crypto from "crypto-js"
+-
+-const deletePolicies = [
+-  "upload_download_stream",
+-  "delete_on_upload_succeed",
+-  "delete_on_upload_failed",
+-  "delete_never",
+-  "delete_always",
+-] as const
+-
+-type DeletePolicy = (typeof deletePolicies)[number]
+-
+-function utf8Decode(data: Uint8Array): string {
+-  return crypto.enc.Utf8.stringify(crypto.lib.WordArray.create(data))
+-}
+-
+-function toMagnetUrl(torrentBuffer: Uint8Array) {
+-  const data = bencode.decode(torrentBuffer as any)
+-  const infoEncode = bencode.encode(data.info) as unknown as Uint8Array
+-
+-  const infoHash = crypto
+-    .SHA1(crypto.lib.WordArray.create(infoEncode))
+-    .toString()
+-  let params = {} as any
+-
+-  if (Number.isInteger(data?.info?.length)) {
+-    params.xl = data.info.length
+-  }
+-  if (data.info.name) {
+-    params.dn = utf8Decode(data.info.name)
+-  }
+-  if (data.announce) {
+-    params.tr = utf8Decode(data.announce)
+-  }
+-
+-  return `magnet:?xt=urn:btih:${infoHash}&${new URLSearchParams(
+-    params,
+-  ).toString()}`
+-}
+-
+-export const OfflineDownload = () => {
+-  const t = useT()
+-  const [tools, setTools] = createSignal([] as string[])
+-  const [toolsLoading, reqTool] = useFetch((): PResp<string[]> => {
+-    return r.get("/public/offline_download_tools")
+-  })
+-  const [tool, setTool] = createSignal("")
+-  const [deletePolicy, setDeletePolicy] = createSignal<DeletePolicy>(
+-    "upload_download_stream",
+-  )
+-  onMount(async () => {
+-    const resp = await reqTool()
+-    handleResp(resp, (data) => {
+-      setTools(data)
+-      setTool(data[0])
+-    })
+-  })
+-
+-  const { isOpen, onOpen, onClose } = createDisclosure()
+-  const [loading, ok] = useFetch(offlineDownload)
+-  const { pathname } = useRouter()
+-  const handler = (name: string) => {
+-    if (name === "offline_download") {
+-      onOpen()
+-    }
+-  }
+-  bus.on("tool", handler)
+-  onCleanup(() => {
+-    bus.off("tool", handler)
+-  })
+-
+-  // convert torrent file to magnet link
+-  const handleTorrentFileDrop = async (
+-    e: DragEvent,
+-    setValue: (value: string) => void,
+-  ) => {
+-    e.preventDefault()
+-    if (e.dataTransfer?.files.length) {
+-      const values = []
+-      for (const file of e.dataTransfer.files) {
+-        if (file.name.toLowerCase().endsWith(".torrent")) {
+-          try {
+-            const buffer = await file.arrayBuffer()
+-            values.push(toMagnetUrl(new Uint8Array(buffer)))
+-          } catch (err) {
+-            console.error("Failed to convert torrent file to magnet link:", err)
+-          }
+-        }
+-      }
+-      if (values.length) {
+-        setValue(values.join("\n"))
+-      }
+-    }
+-  }
+-
+-  return (
+-    <ModalInput
+-      title="home.toolbar.offline_download"
+-      type="text"
+-      opened={isOpen()}
+-      onClose={onClose}
+-      loading={toolsLoading() || loading()}
+-      tips={t("home.toolbar.offline_download-tips")}
+-      onDrop={handleTorrentFileDrop}
+-      topSlot={
+-        <Box mb="$2">
+-          <SelectWrapper
+-            value={tool()}
+-            onChange={(v) => {
+-              if (
+-                v !== "SimpleHttp" &&
+-                deletePolicy() === "upload_download_stream"
+-              ) {
+-                setDeletePolicy("delete_on_upload_succeed")
+-              }
+-              setTool(v)
+-            }}
+-            options={tools().map((tool) => {
+-              return { value: tool, label: tool }
+-            })}
+-          />
+-        </Box>
+-      }
+-      bottomSlot={
+-        <Box mb="$2">
+-          <SelectWrapper
+-            value={deletePolicy()}
+-            onChange={(v) => setDeletePolicy(v as DeletePolicy)}
+-            options={deletePolicies
+-              .filter((policy) =>
+-                policy == "upload_download_stream"
+-                  ? tool() === "SimpleHttp"
+-                  : true,
+-              )
+-              .map((policy) => {
+-                return {
+-                  value: policy,
+-                  label: t(`home.toolbar.delete_policy.${policy}`),
+-                }
+-              })}
+-          />
+-        </Box>
+-      }
+-      onSubmit={async (urls) => {
+-        const resp = await ok(
+-          pathname(),
+-          urls.split("\n"),
+-          tool(),
+-          deletePolicy(),
+-        )
+-        handleRespWithNotifySuccess(resp, () => {
+-          onClose()
+-        })
+-      }}
+-    />
+-  )
+-}
+diff --git a/src/pages/home/toolbar/OfflineDownloadEnhanced.tsx b/src/pages/home/toolbar/OfflineDownloadEnhanced.tsx
+deleted file mode 100644
+index 888d627..0000000
+--- a/src/pages/home/toolbar/OfflineDownloadEnhanced.tsx
++++ /dev/null
+@@ -1,862 +0,0 @@
+-import {
+-  Modal,
+-  ModalOverlay,
+-  ModalContent,
+-  ModalHeader,
+-  ModalBody,
+-  ModalFooter,
+-  Button,
+-  Textarea,
+-  Box,
+-  HStack,
+-  VStack,
+-  Text,
+-  Badge,
+-  Heading,
+-  createDisclosure,
+-  notificationService,
+-} from "@hope-ui/solid"
+-import { SelectWrapper, FolderChooseInput } from "~/components"
+-import { useFetch, useRouter, useT } from "~/hooks"
+-import {
+-  offlineDownload,
+-  fsGet,
+-  torrentParse,
+-  torrentRapidUpload,
+-  bus,
+-  handleRespWithNotifySuccess,
+-  handleResp,
+-  r,
+-} from "~/utils"
+-import {
+-  createSignal,
+-  onCleanup,
+-  onMount,
+-  Show,
+-  createMemo,
+-  createEffect,
+-} from "solid-js"
+-import { PResp, TorrentInfo } from "~/types"
+-import bencode from "bencode"
+-import crypto from "crypto-js"
+-import { TorrentFileList } from "./TorrentFileList"
+-
+-const deletePolicies = [
+-  "upload_download_stream",
+-  "delete_on_upload_succeed",
+-  "delete_on_upload_failed",
+-  "delete_never",
+-  "delete_always",
+-] as const
+-
+-type DeletePolicy = (typeof deletePolicies)[number]
+-
+-// Tab 类型
+-type TabType = "link" | "bt"
+-
+-function utf8Decode(data: Uint8Array): string {
+-  return crypto.enc.Utf8.stringify(crypto.lib.WordArray.create(data))
+-}
+-
+-function toMagnetUrl(torrentBuffer: Uint8Array) {
+-  const data = bencode.decode(torrentBuffer as any)
+-  const infoEncode = bencode.encode(data.info) as unknown as Uint8Array
+-  const infoHash = crypto
+-    .SHA1(crypto.lib.WordArray.create(infoEncode))
+-    .toString()
+-  let params = {} as any
+-  if (Number.isInteger(data?.info?.length)) {
+-    params.xl = data.info.length
+-  }
+-  if (data.info.name) {
+-    params.dn = utf8Decode(data.info.name)
+-  }
+-  if (data.announce) {
+-    params.tr = utf8Decode(data.announce)
+-  }
+-  const paramStr = new URLSearchParams(params).toString()
+-  return `magnet:?xt=urn:btih:${infoHash}${paramStr ? "&" + paramStr : ""}`
+-}
+-
+-function arrayBufferToBase64(buffer: ArrayBuffer): string {
+-  const bytes = new Uint8Array(buffer)
+-  let binary = ""
+-  for (let i = 0; i < bytes.byteLength; i++) {
+-    binary += String.fromCharCode(bytes[i])
+-  }
+-  return btoa(binary)
+-}
+-
+-function formatFileSize(bytes: number): string {
+-  if (bytes === 0) return "0 B"
+-  const k = 1024
+-  const sizes = ["B", "KB", "MB", "GB", "TB"]
+-  const i = Math.floor(Math.log(bytes) / Math.log(k))
+-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+-}
+-
+-export const OfflineDownloadEnhanced = () => {
+-  const t = useT()
+-  const { pathname } = useRouter()
+-
+-  // 下载工具列表
+-  const [tools, setTools] = createSignal([] as string[])
+-  const [toolsLoading, reqTool] = useFetch((): PResp<string[]> => {
+-    return r.get("/public/offline_download_tools")
+-  })
+-  const [tool, setTool] = createSignal("")
+-  const [deletePolicy, setDeletePolicy] = createSignal<DeletePolicy>(
+-    "upload_download_stream",
+-  )
+-
+-  // 对话框状态
+-  const { isOpen, onOpen, onClose } = createDisclosure()
+-  const [activeTab, setActiveTab] = createSignal<TabType>("link")
+-
+-  // 链接下载状态
+-  const [linkValue, setLinkValue] = createSignal("")
+-  const [linkLoading, submitLink] = useFetch(offlineDownload)
+-
+-  // BT 下载状态
+-  const [torrentInfo, setTorrentInfo] = createSignal<TorrentInfo | null>(null)
+-  const [torrentData, setTorrentData] = createSignal<string>("") // Base64 编码
+-  const [selectedFiles, setSelectedFiles] = createSignal<number[]>([])
+-  const [btLoading, setBtLoading] = createSignal(false)
+-  const [parsing, setParsing] = createSignal(false)
+-
+-  // 保存路径
+-  const [savePath, setSavePath] = createSignal("")
+-  const [savePathProvider, setSavePathProvider] = createSignal("")
+-  const savePathProviderCache = new Map<string, string>()
+-  let savePathProviderTimer: ReturnType<typeof setTimeout> | undefined
+-
+-  let savePathProviderRequestSeq = 0
+-  const clearSavePathProviderTimer = () => {
+-    if (savePathProviderTimer) {
+-      clearTimeout(savePathProviderTimer)
+-      savePathProviderTimer = undefined
+-    }
+-  }
+-
+-  const updateSavePathProvider = (path: string) => {
+-    const normalizedPath = path.trim()
+-    clearSavePathProviderTimer()
+-    if (!normalizedPath) {
+-      setSavePathProvider("")
+-      return
+-    }
+-
+-    const cachedProvider = savePathProviderCache.get(normalizedPath)
+-    if (cachedProvider !== undefined) {
+-      setSavePathProvider(cachedProvider)
+-      return
+-    }
+-
+-    // Clear stale provider immediately to avoid using previous path's provider.
+-    setSavePathProvider("")
+-    const requestSeq = ++savePathProviderRequestSeq
+-    savePathProviderTimer = setTimeout(async () => {
+-      try {
+-        const resp = await fsGet(normalizedPath)
+-        if (requestSeq !== savePathProviderRequestSeq) {
+-          return
+-        }
+-        if (resp.code === 200) {
+-          const provider = resp.data.provider || ""
+-          savePathProviderCache.set(normalizedPath, provider)
+-          setSavePathProvider(provider)
+-        } else {
+-          setSavePathProvider("")
+-        }
+-      } catch {
+-        if (requestSeq === savePathProviderRequestSeq) {
+-          setSavePathProvider("")
+-        }
+-      }
+-    }, 250)
+-  }
+-
+-  // 秒传状态
+-  const [rapidUploading, setRapidUploading] = createSignal(false)
+-  const [rapidUploadResult, setRapidUploadResult] = createSignal<string>("")
+-  // 秒传失败后允许回退到普通离线下载
+-  const [casRapidUploadFailed, setCasRapidUploadFailed] =
+-    createSignal<boolean>(false)
+-
+-  // 检测输入中是否包含 ed2k 链接
+-  const hasEd2kLinks = createMemo(() => {
+-    return linkValue()
+-      .split("\n")
+-      .some((line) => line.trim().toLowerCase().startsWith("ed2k://"))
+-  })
+-
+-  // 当有 CAS 信息且秒传尚未失败时，默认使用天翼云秒传（不需要 aria2）
+-  const shouldUseCasRapidUpload = createMemo(() => {
+-    return (
+-      activeTab() === "bt" &&
+-      !!torrentInfo()?.has_cas &&
+-      savePathProvider() === "189CloudPC" &&
+-      !casRapidUploadFailed()
+-    )
+-  })
+-
+-  // 仅在 BT 且包含 CAS 信息时才查询目标路径 provider，减少无效请求。
+-  createEffect(() => {
+-    const shouldCheckProvider = activeTab() === "bt" && !!torrentInfo()?.has_cas
+-    if (!shouldCheckProvider) {
+-      clearSavePathProviderTimer()
+-      setSavePathProvider("")
+-      return
+-    }
+-    updateSavePathProvider(savePath())
+-  })
+-
+-  // 检测输入中是否包含磁力链
+-  const hasMagnetLinks = createMemo(() => {
+-    return linkValue()
+-      .split("\n")
+-      .some((line) => line.trim().toLowerCase().startsWith("magnet:?"))
+-  })
+-
+-  // 是否应该禁用 SimpleHttp（BT种子/磁力链/ed2k 场景不支持）
+-  const shouldDisableSimpleHttp = createMemo(() => {
+-    return activeTab() === "bt" || hasEd2kLinks() || hasMagnetLinks()
+-  })
+-
+-  // 可用的工具列表（根据场景过滤）
+-  const availableTools = createMemo(() => {
+-    if (shouldDisableSimpleHttp()) {
+-      return tools().filter((t) => t !== "SimpleHttp")
+-    }
+-    return tools()
+-  })
+-
+-  // 当 SimpleHttp 被禁用时，自动切换到第一个可用工具
+-  createEffect(() => {
+-    if (shouldDisableSimpleHttp() && tool() === "SimpleHttp") {
+-      const available = availableTools()
+-      if (available.length > 0) {
+-        setTool(available[0])
+-      }
+-    }
+-  })
+-
+-  onMount(async () => {
+-    const resp = await reqTool()
+-    handleResp(resp, (data) => {
+-      setTools(data)
+-      setTool(data[0])
+-    })
+-  })
+-
+-  // 监听 bus 事件
+-  const handler = (name: string) => {
+-    if (name === "offline_download") {
+-      const currentPath = pathname()
+-      setSavePath(currentPath)
+-      onOpen()
+-    }
+-  }
+-  bus.on("tool", handler)
+-  onCleanup(() => {
+-    bus.off("tool", handler)
+-  })
+-
+-  // 监听从右键菜单触发的 torrent 解析事件
+-  const torrentHandler = (data: { torrentData: string; info: TorrentInfo }) => {
+-    setTorrentData(data.torrentData)
+-    setTorrentInfo(data.info)
+-    setSelectedFiles(data.info.files.map((_, i) => i))
+-    setActiveTab("bt")
+-    const currentPath = pathname()
+-    setSavePath(currentPath)
+-    onOpen()
+-  }
+-  bus.on("torrent_parsed", torrentHandler)
+-  onCleanup(() => {
+-    bus.off("torrent_parsed", torrentHandler)
+-  })
+-
+-  // 生成 CAS 文件并下载（纯前端）
+-  const handleGenerateCASFile = () => {
+-    const info = torrentInfo()
+-    if (!info?.has_cas || !info.cas) return
+-    try {
+-      const casJson = JSON.stringify({
+-        md5: info.cas.file_md5,
+-        name: info.name,
+-        size: info.total_size,
+-        sliceMd5: info.cas.slice_md5,
+-      })
+-      const casContent = btoa(casJson)
+-      const blob = new Blob([casContent], { type: "text/plain;charset=utf-8" })
+-      const url = URL.createObjectURL(blob)
+-      const a = document.createElement("a")
+-      a.href = url
+-      a.download = `${info.name}.cas`
+-      document.body.appendChild(a)
+-      a.click()
+-      document.body.removeChild(a)
+-      URL.revokeObjectURL(url)
+-      notificationService.show({
+-        status: "success",
+-        title: t("home.toolbar.offline_download_enhanced.cas_file_generated"),
+-      })
+-    } catch (err) {
+-      notificationService.show({
+-        status: "danger",
+-        title: t(
+-          "home.toolbar.offline_download_enhanced.cas_file_generate_failed",
+-        ),
+-        description: String(err),
+-      })
+-    }
+-  }
+-
+-  // 重置状态
+-  const resetState = () => {
+-    clearSavePathProviderTimer()
+-    savePathProviderRequestSeq += 1
+-    setLinkValue("")
+-    setTorrentInfo(null)
+-    setTorrentData("")
+-    setSelectedFiles([])
+-    setSavePathProvider("")
+-    setRapidUploadResult("")
+-    setCasRapidUploadFailed(false)
+-  }
+-
+-  const handleClose = () => {
+-    resetState()
+-    onClose()
+-  }
+-
+-  onCleanup(() => {
+-    clearSavePathProviderTimer()
+-  })
+-
+-  // 处理 torrent 文件拖拽/选择
+-  const handleTorrentFile = async (file: File) => {
+-    if (file.size > 10 * 1024 * 1024) {
+-      notificationService.show({
+-        status: "danger",
+-        title: t("home.toolbar.offline_download_enhanced.torrent_too_large"),
+-      })
+-      return
+-    }
+-
+-    setParsing(true)
+-    try {
+-      const buffer = await file.arrayBuffer()
+-      const base64Data = arrayBufferToBase64(buffer)
+-
+-      const resp = await torrentParse(base64Data)
+-      handleResp(resp, (data) => {
+-        setTorrentInfo(data)
+-        setTorrentData(base64Data)
+-        setSelectedFiles(data.files.map((_, i) => i))
+-      })
+-    } catch (err) {
+-      notificationService.show({
+-        status: "danger",
+-        title: t("home.toolbar.offline_download_enhanced.parse_failed"),
+-        description: String(err),
+-      })
+-    } finally {
+-      setParsing(false)
+-    }
+-  }
+-
+-  // 拖拽处理
+-  const handleDrop = (e: DragEvent) => {
+-    e.preventDefault()
+-    e.stopPropagation()
+-    if (!e.dataTransfer?.files.length) return
+-
+-    if (activeTab() === "bt") {
+-      // BT Tab: 解析第一个 torrent 文件
+-      for (const file of e.dataTransfer.files) {
+-        if (file.name.toLowerCase().endsWith(".torrent")) {
+-          handleTorrentFile(file)
+-          return
+-        }
+-      }
+-    } else {
+-      // Link Tab: 将 torrent 文件转换为磁力链追加到输入框
+-      const processFiles = async () => {
+-        const values: string[] = []
+-        for (const file of e.dataTransfer!.files) {
+-          if (file.name.toLowerCase().endsWith(".torrent")) {
+-            try {
+-              const buffer = await file.arrayBuffer()
+-              values.push(toMagnetUrl(new Uint8Array(buffer)))
+-            } catch (err) {
+-              console.error("Failed to convert torrent:", err)
+-            }
+-          }
+-        }
+-        if (values.length) {
+-          setLinkValue((prev) =>
+-            prev ? prev + "\n" + values.join("\n") : values.join("\n"),
+-          )
+-        }
+-      }
+-      processFiles()
+-    }
+-  }
+-
+-  // 文件选择处理
+-  const handleFileSelect = () => {
+-    const input = document.createElement("input")
+-    input.type = "file"
+-    input.accept = ".torrent"
+-    input.onchange = (e) => {
+-      const file = (e.target as HTMLInputElement).files?.[0]
+-      if (file) {
+-        handleTorrentFile(file)
+-      }
+-    }
+-    input.click()
+-  }
+-
+-  // 提交链接下载
+-  const handleLinkSubmit = async () => {
+-    if (!linkValue().trim()) return
+-    const urls = linkValue()
+-      .split("\n")
+-      .filter((u) => u.trim())
+-    const resp = await submitLink(savePath(), urls, tool(), deletePolicy())
+-    handleRespWithNotifySuccess(resp, () => {
+-      handleClose()
+-    })
+-  }
+-
+-  // 提交 BT 下载
+-  const handleBtSubmit = async () => {
+-    const info = torrentInfo()
+-    if (!info || !torrentData()) return
+-
+-    setBtLoading(true)
+-    try {
+-      // 有 CAS 信息且秒传尚未失败时，默认直接走天翼云秒传
+-      if (shouldUseCasRapidUpload()) {
+-        setRapidUploading(true)
+-        try {
+-          const resp = await torrentRapidUpload(torrentData(), savePath())
+-          if (resp.code === 200) {
+-            setRapidUploadResult("success")
+-            notificationService.show({
+-              status: "success",
+-              title: t(
+-                "home.toolbar.offline_download_enhanced.rapid_upload_success",
+-              ),
+-              description: resp.data.file_name,
+-            })
+-            handleClose()
+-            return
+-          } else {
+-            // 秒传失败，标记允许回退到普通离线下载
+-            setCasRapidUploadFailed(true)
+-            notificationService.show({
+-              status: "warning",
+-              title: t(
+-                "home.toolbar.offline_download_enhanced.cas_rapid_upload_failed",
+-              ),
+-              description: resp.message,
+-            })
+-          }
+-        } catch (err) {
+-          // 秒传异常，标记允许回退到普通离线下载
+-          setCasRapidUploadFailed(true)
+-          notificationService.show({
+-            status: "danger",
+-            title: t(
+-              "home.toolbar.offline_download_enhanced.cas_rapid_upload_failed",
+-            ),
+-            description: String(err),
+-          })
+-        } finally {
+-          setRapidUploading(false)
+-        }
+-        // 秒传失败后返回，让用户选择是否继续普通离线下载
+-        return
+-      }
+-
+-      // 无 CAS 信息或秒传失败后，走正常离线下载流程
+-      // SimpleHttp 不支持磁力链/BT 下载
+-      if (tool() === "SimpleHttp") {
+-        notificationService.show({
+-          status: "warning",
+-          title: t(
+-            "home.toolbar.offline_download_enhanced.simplehttp_not_supported",
+-          ),
+-        })
+-        return
+-      }
+-
+-      // 正常离线下载：将 torrent 转为磁力链提交
+-      const buffer = Uint8Array.from(atob(torrentData()), (c) =>
+-        c.charCodeAt(0),
+-      )
+-      const magnetUrl = toMagnetUrl(buffer)
+-      const resp = await offlineDownload(
+-        savePath(),
+-        [magnetUrl],
+-        tool(),
+-        deletePolicy(),
+-      )
+-      handleRespWithNotifySuccess(resp, () => {
+-        handleClose()
+-      })
+-    } finally {
+-      setBtLoading(false)
+-    }
+-  }
+-
+-  return (
+-    <Modal
+-      size="xl"
+-      blockScrollOnMount={false}
+-      opened={isOpen()}
+-      onClose={handleClose}
+-    >
+-      <ModalOverlay />
+-      <ModalContent
+-        onDragOver={(e: DragEvent) => {
+-          e.preventDefault()
+-          e.stopPropagation()
+-        }}
+-        onDrop={handleDrop}
+-      >
+-        <ModalHeader>{t("home.toolbar.offline_download")}</ModalHeader>
+-        <ModalBody>
+-          {/* Tab 切换 */}
+-          <HStack spacing="$2" mb="$3">
+-            <Button
+-              size="sm"
+-              variant={activeTab() === "link" ? "solid" : "outline"}
+-              onClick={() => setActiveTab("link")}
+-            >
+-              {t("home.toolbar.offline_download_enhanced.tab_link")}
+-            </Button>
+-            <Button
+-              size="sm"
+-              variant={activeTab() === "bt" ? "solid" : "outline"}
+-              onClick={() => setActiveTab("bt")}
+-            >
+-              {t("home.toolbar.offline_download_enhanced.tab_bt")}
+-            </Button>
+-          </HStack>
+-
+-          {/* 链接下载 Tab */}
+-          <Show when={activeTab() === "link"}>
+-            <VStack spacing="$2" alignItems="stretch">
+-              <Textarea
+-                placeholder={t(
+-                  "home.toolbar.offline_download_enhanced.link_placeholder",
+-                )}
+-                value={linkValue()}
+-                onInput={(e) => setLinkValue(e.currentTarget.value)}
+-                minH="120px"
+-              />
+-              <Text fontSize="$xs" color="$neutral10">
+-                {t("home.toolbar.offline_download_enhanced.link_tips")}
+-              </Text>
+-            </VStack>
+-          </Show>
+-
+-          {/* BT 下载 Tab */}
+-          <Show when={activeTab() === "bt"}>
+-            <VStack spacing="$3" alignItems="stretch">
+-              {/* 未解析时显示上传区域 */}
+-              <Show when={!torrentInfo()}>
+-                <Box
+-                  border="2px dashed $neutral7"
+-                  borderRadius="$md"
+-                  p="$6"
+-                  textAlign="center"
+-                  cursor="pointer"
+-                  onClick={handleFileSelect}
+-                  _hover={{ borderColor: "$primary9", bg: "$primary3" }}
+-                >
+-                  <Show
+-                    when={parsing()}
+-                    fallback={
+-                      <VStack spacing="$2">
+-                        <Text fontSize="$lg" fontWeight="$bold">
+-                          {t(
+-                            "home.toolbar.offline_download_enhanced.drop_torrent",
+-                          )}
+-                        </Text>
+-                        <Text fontSize="$sm" color="$neutral10">
+-                          {t(
+-                            "home.toolbar.offline_download_enhanced.click_to_select",
+-                          )}
+-                        </Text>
+-                      </VStack>
+-                    }
+-                  >
+-                    <Text>
+-                      {t("home.toolbar.offline_download_enhanced.parsing")}
+-                    </Text>
+-                  </Show>
+-                </Box>
+-              </Show>
+-
+-              {/* 已解析时显示文件列表 */}
+-              <Show when={torrentInfo()}>
+-                <VStack spacing="$2" alignItems="stretch">
+-                  {/* 种子信息头部 */}
+-                  <HStack justifyContent="space-between" alignItems="center">
+-                    <VStack alignItems="flex-start" spacing="$1">
+-                      <Heading size="sm" css={{ wordBreak: "break-all" }}>
+-                        {torrentInfo()!.name}
+-                      </Heading>
+-                      <HStack spacing="$2">
+-                        <Text fontSize="$xs" color="$neutral10">
+-                          {formatFileSize(torrentInfo()!.total_size)}
+-                        </Text>
+-                        <Text fontSize="$xs" color="$neutral10">
+-                          {torrentInfo()!.files.length}{" "}
+-                          {t(
+-                            "home.toolbar.offline_download_enhanced.files_count",
+-                          )}
+-                        </Text>
+-                      </HStack>
+-                    </VStack>
+-                    <HStack spacing="$2">
+-                      <Show when={torrentInfo()!.has_cas}>
+-                        <Badge colorScheme="success">
+-                          {t(
+-                            "home.toolbar.offline_download_enhanced.cas_supported",
+-                          )}
+-                        </Badge>
+-                      </Show>
+-                      <Button
+-                        size="xs"
+-                        variant="outline"
+-                        onClick={() => {
+-                          setTorrentInfo(null)
+-                          setTorrentData("")
+-                          setSelectedFiles([])
+-                        }}
+-                      >
+-                        {t("home.toolbar.offline_download_enhanced.reselect")}
+-                      </Button>
+-                    </HStack>
+-                  </HStack>
+-
+-                  {/* 文件列表 */}
+-                  <TorrentFileList
+-                    files={torrentInfo()!.files}
+-                    selectedFiles={selectedFiles()}
+-                    onSelectionChange={setSelectedFiles}
+-                  />
+-                  <Text fontSize="$xs" color="$neutral9" mt="$1">
+-                    {t(
+-                      "home.toolbar.offline_download_enhanced.file_selection_hint",
+-                    )}
+-                  </Text>
+-                </VStack>
+-              </Show>
+-            </VStack>
+-          </Show>
+-
+-          {/* 公共选项区域 */}
+-          <VStack spacing="$2" mt="$3" alignItems="stretch">
+-            {/* 保存路径 */}
+-            <Box>
+-              <Text fontSize="$sm" mb="$1" fontWeight="$medium">
+-                {t("home.toolbar.offline_download_enhanced.save_path")}
+-              </Text>
+-              <FolderChooseInput
+-                value={savePath()}
+-                onChange={setSavePath}
+-                id="offline-download-path"
+-              />
+-            </Box>
+-
+-            {/* 下载工具选择（CAS 秒传模式下隐藏） */}
+-            <Show when={!shouldUseCasRapidUpload()}>
+-              <Box>
+-                <Text fontSize="$sm" mb="$1" fontWeight="$medium">
+-                  {t("home.toolbar.offline_download_enhanced.download_tool")}
+-                </Text>
+-                <SelectWrapper
+-                  value={
+-                    shouldDisableSimpleHttp() && tool() === "SimpleHttp"
+-                      ? availableTools()[0] || ""
+-                      : tool()
+-                  }
+-                  onChange={(v) => {
+-                    if (
+-                      v !== "SimpleHttp" &&
+-                      deletePolicy() === "upload_download_stream"
+-                    ) {
+-                      setDeletePolicy("delete_on_upload_succeed")
+-                    }
+-                    setTool(v)
+-                  }}
+-                  options={availableTools().map((t) => ({
+-                    value: t,
+-                    label: t,
+-                  }))}
+-                />
+-                <Show
+-                  when={
+-                    shouldDisableSimpleHttp() && tools().includes("SimpleHttp")
+-                  }
+-                >
+-                  <Text fontSize="$xs" color="$neutral9" mt="$1">
+-                    {t(
+-                      "home.toolbar.offline_download_enhanced.simplehttp_not_supported",
+-                    )}
+-                  </Text>
+-                </Show>
+-              </Box>
+-
+-              {/* 删除策略 */}
+-              <Box>
+-                <Text fontSize="$sm" mb="$1" fontWeight="$medium">
+-                  {t("home.toolbar.offline_download_enhanced.delete_policy")}
+-                </Text>
+-                <SelectWrapper
+-                  value={deletePolicy()}
+-                  onChange={(v) => setDeletePolicy(v as DeletePolicy)}
+-                  options={deletePolicies
+-                    .filter((policy) =>
+-                      policy === "upload_download_stream"
+-                        ? tool() === "SimpleHttp"
+-                        : true,
+-                    )
+-                    .map((policy) => ({
+-                      value: policy,
+-                      label: t(`home.toolbar.delete_policy.${policy}`),
+-                    }))}
+-                />
+-              </Box>
+-            </Show>
+-
+-            {/* CAS 秒传提示 */}
+-            <Show when={shouldUseCasRapidUpload()}>
+-              <Box
+-                p="$2"
+-                bg="$success3"
+-                borderRadius="$sm"
+-                border="1px solid $success7"
+-              >
+-                <Text fontSize="$sm" color="$success11">
+-                  {t(
+-                    "home.toolbar.offline_download_enhanced.cas_rapid_upload_mode",
+-                  )}
+-                </Text>
+-              </Box>
+-              {/* 生成 CAS 文件按钮 */}
+-              <Button
+-                size="sm"
+-                variant="outline"
+-                onClick={handleGenerateCASFile}
+-              >
+-                {t("home.toolbar.offline_download_enhanced.generate_cas_file")}
+-              </Button>
+-            </Show>
+-
+-            {/* CAS 秒传失败后，提示用户可继续普通离线下载 */}
+-            <Show
+-              when={
+-                activeTab() === "bt" &&
+-                torrentInfo()?.has_cas &&
+-                casRapidUploadFailed()
+-              }
+-            >
+-              <Box
+-                p="$2"
+-                bg="$warning3"
+-                borderRadius="$sm"
+-                border="1px solid $warning7"
+-              >
+-                <Text fontSize="$sm" color="$warning11">
+-                  {t(
+-                    "home.toolbar.offline_download_enhanced.cas_failed_fallback_hint",
+-                  )}
+-                </Text>
+-              </Box>
+-            </Show>
+-
+-            <Show
+-              when={
+-                activeTab() === "bt" && torrentInfo() && !torrentInfo()!.has_cas
+-              }
+-            >
+-              <Box
+-                p="$2"
+-                bg="$warning3"
+-                borderRadius="$sm"
+-                border="1px solid $warning7"
+-              >
+-                <Text fontSize="$sm" color="$warning11">
+-                  {t("home.toolbar.offline_download_enhanced.no_cas_hint")}
+-                </Text>
+-              </Box>
+-            </Show>
+-
+-            {/* ed2k 链接工具提示 */}
+-            <Show
+-              when={
+-                activeTab() === "link" &&
+-                hasEd2kLinks() &&
+-                (tool() === "aria2" ||
+-                  tool() === "SimpleHttp" ||
+-                  tool() === "qBittorrent")
+-              }
+-            >
+-              <Box
+-                p="$2"
+-                bg="$warning3"
+-                borderRadius="$sm"
+-                border="1px solid $warning7"
+-              >
+-                <Text fontSize="$sm" color="$warning11">
+-                  {t("home.toolbar.offline_download_enhanced.ed2k_tool_hint")}
+-                </Text>
+-              </Box>
+-            </Show>
+-          </VStack>
+-        </ModalBody>
+-
+-        <ModalFooter display="flex" gap="$2">
+-          <Button onClick={handleClose} colorScheme="neutral">
+-            {t("global.cancel")}
+-          </Button>
+-          <Show when={activeTab() === "link"}>
+-            <Button
+-              loading={linkLoading()}
+-              onClick={handleLinkSubmit}
+-              disabled={!linkValue().trim()}
+-            >
+-              {t("home.toolbar.offline_download_enhanced.start_download")}
+-            </Button>
+-          </Show>
+-          <Show when={activeTab() === "bt"}>
+-            <Button
+-              loading={btLoading() || rapidUploading()}
+-              onClick={handleBtSubmit}
+-              disabled={!torrentInfo()}
+-            >
+-              <Show
+-                when={shouldUseCasRapidUpload() && !rapidUploading()}
+-                fallback={t(
+-                  "home.toolbar.offline_download_enhanced.start_download",
+-                )}
+-              >
+-                {t(
+-                  "home.toolbar.offline_download_enhanced.rapid_upload_and_download",
+-                )}
+-              </Show>
+-            </Button>
+-          </Show>
+-        </ModalFooter>
+-      </ModalContent>
+-    </Modal>
+-  )
+-}
+diff --git a/src/pages/home/toolbar/Right.tsx b/src/pages/home/toolbar/Right.tsx
+index f008309..b4ac6d8 100644
+--- a/src/pages/home/toolbar/Right.tsx
++++ b/src/pages/home/toolbar/Right.tsx
+@@ -6,7 +6,6 @@ import { TbCheckbox } from "solid-icons/tb"
+ import { objStore, selectAll, State, toggleCheckbox, userCan } from "~/store"
+ import { bus } from "~/utils"
+ import { operations } from "./operations"
+-import { IoMagnetOutline } from "solid-icons/io"
+ import { AiOutlineCloudUpload, AiOutlineSetting } from "solid-icons/ai"
+ import { RiSystemRefreshLine } from "solid-icons/ri"
+ import { usePath, useRouter } from "~/hooks"
+@@ -147,23 +146,6 @@ export const Right = () => {
+                 }}
+               />
+             </Show>
+-            <Show
+-              when={
+-                isFolder() &&
+-                !isShare() &&
+-                userCan("offline_download") &&
+-                objStore.write
+-              }
+-            >
+-              <RightIcon
+-                as={IoMagnetOutline}
+-                pl="0"
+-                tips="offline_download"
+-                onClick={() => {
+-                  bus.emit("tool", "offline_download")
+-                }}
+-              />
+-            </Show>
+             <Show when={isTocVisible()}>
+               <RightIcon
+                 as={BiSolidBookContent}
+diff --git a/src/pages/home/toolbar/Share.tsx b/src/pages/home/toolbar/Share.tsx
+deleted file mode 100644
+index dc0cf0f..0000000
+--- a/src/pages/home/toolbar/Share.tsx
++++ /dev/null
+@@ -1,303 +0,0 @@
+-import { useFetch, useRouter, useT, useUtil } from "~/hooks"
+-import {
+-  bus,
+-  getExpireDate,
+-  handleResp,
+-  makeTemplateData,
+-  matchTemplate,
+-  r,
+-  randomPwd,
+-} from "~/utils"
+-import { batch, createSignal, Match, onCleanup, Switch } from "solid-js"
+-import {
+-  Button,
+-  createDisclosure,
+-  HStack,
+-  IconButton,
+-  Input,
+-  Modal,
+-  ModalBody,
+-  ModalContent,
+-  ModalFooter,
+-  ModalHeader,
+-  ModalOverlay,
+-  Select,
+-  Text,
+-  Textarea,
+-  VStack,
+-} from "@hope-ui/solid"
+-import {
+-  ExtractFolder,
+-  OrderBy,
+-  OrderDirection,
+-  PResp,
+-  Share as ShareType,
+-  ShareInfo,
+-} from "~/types"
+-import { createStore } from "solid-js/store"
+-import { getSetting, me, selectedObjs } from "~/store"
+-import { TbRefresh } from "solid-icons/tb"
+-import { SelectOptions, MultiPathInput } from "~/components"
+-
+-export const Share = () => {
+-  const t = useT()
+-  const [link, setLink] = createSignal("")
+-  const { pathname } = useRouter()
+-  const handler = (name: string) => {
+-    if (name === "share") {
+-      batch(() => {
+-        setLink("")
+-        setExpireString("")
+-        setExpireValid(true)
+-        const paths = selectedObjs().map((obj) => {
+-          const split =
+-            pathname().endsWith("/") || obj.name.startsWith("/") ? "" : "/"
+-          return `${me().base_path}${pathname()}${split}${obj.name}`
+-        })
+-        setShare({
+-          files: paths,
+-          expires: null,
+-          pwd: "",
+-          max_accessed: 0,
+-          order_by: OrderBy.None,
+-          order_direction: OrderDirection.None,
+-          extract_folder: ExtractFolder.None,
+-          remark: "",
+-          readme: "",
+-          header: "",
+-        } as ShareType)
+-      })
+-      onOpen()
+-    }
+-  }
+-  bus.on("tool", handler)
+-  onCleanup(() => {
+-    bus.off("tool", handler)
+-  })
+-  const { isOpen, onOpen, onClose } = createDisclosure()
+-  const { copy } = useUtil()
+-  const [expireString, setExpireString] = createSignal("")
+-  const [expireValid, setExpireValid] = createSignal(true)
+-  const [share, setShare] = createStore<ShareType>({} as ShareType)
+-  const [okLoading, ok] = useFetch((): PResp<ShareInfo> => {
+-    return r.post(`/share/create`, share)
+-  })
+-  return (
+-    <Modal
+-      blockScrollOnMount={false}
+-      opened={isOpen()}
+-      onClose={onClose}
+-      size={{
+-        "@initial": "xs",
+-        "@md": "md",
+-        "@lg": "lg",
+-        "@xl": "xl",
+-        "@2xl": "2xl",
+-      }}
+-    >
+-      <ModalOverlay />
+-      <ModalContent>
+-        <ModalHeader>{t("home.toolbar.share")}</ModalHeader>
+-        <Switch
+-          fallback={
+-            <>
+-              <ModalBody>
+-                <Textarea variant="filled" value={link()} readonly />
+-              </ModalBody>
+-              <ModalFooter display="flex" gap="$2">
+-                <Button
+-                  colorScheme="primary"
+-                  onClick={() => {
+-                    copy(link())
+-                  }}
+-                >
+-                  {t("shares.copy_msg")}
+-                </Button>
+-                <Button colorScheme="info" onClick={onClose}>
+-                  {t("global.confirm")}
+-                </Button>
+-              </ModalFooter>
+-            </>
+-          }
+-        >
+-          <Match when={link() === ""}>
+-            <ModalBody>
+-              <VStack spacing="$1" alignItems="flex-start">
+-                <Text size="sm">{t("shares.id")}</Text>
+-                <Input
+-                  size="sm"
+-                  value={share.id ?? ""}
+-                  maxLength={64}
+-                  placeholder={t("shares.id_placeholder")}
+-                  onInput={(e) => {
+-                    setShare("id", e.currentTarget.value)
+-                  }}
+-                />
+-                <Text size="sm">{t("shares.remark")}</Text>
+-                <Textarea
+-                  size="sm"
+-                  value={share.remark}
+-                  onInput={(e) => {
+-                    setShare("remark", e.currentTarget.value)
+-                  }}
+-                />
+-                <Text size="sm">{t("shares.extract_folder")}</Text>
+-                <Select
+-                  size="sm"
+-                  value={share.extract_folder}
+-                  onChange={(e) => {
+-                    setShare("extract_folder", e)
+-                  }}
+-                >
+-                  <SelectOptions
+-                    options={[
+-                      {
+-                        key: ExtractFolder.Front,
+-                        label: t("shares.extract_folders.front"),
+-                      },
+-                      {
+-                        key: ExtractFolder.Back,
+-                        label: t("shares.extract_folders.back"),
+-                      },
+-                    ]}
+-                  />
+-                </Select>
+-                <Text size="sm">{t("shares.order_by")}</Text>
+-                <Select
+-                  size="sm"
+-                  value={share.order_by}
+-                  onChange={(e) => {
+-                    setShare("order_by", e)
+-                  }}
+-                >
+-                  <SelectOptions
+-                    options={[
+-                      { key: OrderBy.Name, label: t("shares.order_bys.name") },
+-                      { key: OrderBy.Size, label: t("shares.order_bys.size") },
+-                      {
+-                        key: OrderBy.Modified,
+-                        label: t("shares.order_bys.modified"),
+-                      },
+-                    ]}
+-                  />
+-                </Select>
+-                <Text size="sm">{t("shares.order_direction")}</Text>
+-                <Select
+-                  size="sm"
+-                  value={share.order_direction}
+-                  onChange={(e) => {
+-                    setShare("order_direction", e)
+-                  }}
+-                >
+-                  <SelectOptions
+-                    options={[
+-                      {
+-                        key: OrderDirection.Asc,
+-                        label: t("shares.order_directions.asc"),
+-                      },
+-                      {
+-                        key: OrderDirection.Desc,
+-                        label: t("shares.order_directions.desc"),
+-                      },
+-                    ]}
+-                  />
+-                </Select>
+-                <Text size="sm">{t("shares.pwd")}</Text>
+-                <HStack spacing="$1" w="$full">
+-                  <Input
+-                    size="sm"
+-                    value={share.pwd}
+-                    onInput={(e) => {
+-                      setShare("pwd", e.currentTarget.value)
+-                    }}
+-                  />
+-                  <IconButton
+-                    colorScheme="neutral"
+-                    size="sm"
+-                    aria-label="random"
+-                    icon={<TbRefresh />}
+-                    onClick={() => {
+-                      setShare("pwd", randomPwd())
+-                    }}
+-                  />
+-                </HStack>
+-                <Text size="sm">{t("shares.max_accessed")}</Text>
+-                <Input
+-                  type="number"
+-                  size="sm"
+-                  value={share.max_accessed}
+-                  onInput={(e) => {
+-                    setShare("max_accessed", parseInt(e.currentTarget.value))
+-                  }}
+-                />
+-                <Text size="sm">{t("shares.expires")}</Text>
+-                <Input
+-                  size="sm"
+-                  invalid={!expireValid()}
+-                  value={expireString()}
+-                  placeholder="yyyy-MM-dd HH:mm:ss or +1w1d1H1m1s1ms"
+-                  onInput={(e) => {
+-                    setExpireString(e.currentTarget.value)
+-                    if (e.currentTarget.value === "") {
+-                      setExpireValid(true)
+-                      setShare("expires", null)
+-                      return
+-                    }
+-                    const date = getExpireDate(e.currentTarget.value)
+-                    if (isNaN(date.getTime())) {
+-                      setExpireValid(false)
+-                    } else {
+-                      setExpireValid(true)
+-                      setShare("expires", date.toISOString())
+-                    }
+-                  }}
+-                />
+-                <Text size="sm">{t("shares.readme")}</Text>
+-                <Textarea
+-                  size="sm"
+-                  value={share.readme}
+-                  onInput={(e) => {
+-                    setShare("readme", e.currentTarget.value)
+-                  }}
+-                />
+-                <Text size="sm">{t("shares.header")}</Text>
+-                <Textarea
+-                  size="sm"
+-                  value={share.header}
+-                  onInput={(e) => {
+-                    setShare("header", e.currentTarget.value)
+-                  }}
+-                />
+-              </VStack>
+-            </ModalBody>
+-            <ModalFooter display="flex" gap="$2">
+-              <Button colorScheme="neutral" onClick={onClose}>
+-                {t("global.cancel")}
+-              </Button>
+-              <Button
+-                colorScheme="info"
+-                disabled={!expireValid()}
+-                loading={okLoading()}
+-                onClick={async () => {
+-                  const resp = await ok()
+-                  handleResp(resp, (data) => {
+-                    const templateData = makeTemplateData(data, {
+-                      site_title: getSetting("site_title"),
+-                    })
+-                    const msg = matchTemplate(
+-                      getSetting("share_summary_content"),
+-                      templateData,
+-                    )
+-                    setLink(msg)
+-                  })
+-                }}
+-              >
+-                {t("global.confirm")}
+-              </Button>
+-            </ModalFooter>
+-          </Match>
+-        </Switch>
+-      </ModalContent>
+-    </Modal>
+-  )
+-}
+diff --git a/src/pages/home/toolbar/Toolbar.tsx b/src/pages/home/toolbar/Toolbar.tsx
+index e55e19b..506fced 100644
+--- a/src/pages/home/toolbar/Toolbar.tsx
++++ b/src/pages/home/toolbar/Toolbar.tsx
+@@ -9,14 +9,12 @@ import { Mkdir } from "./Mkdir"
+ import { RecursiveMove } from "./RecursiveMove"
+ import { RemoveEmptyDirectory } from "./RemoveEmptyDirectory"
+ import { BatchRename } from "./BatchRename"
+-import { OfflineDownloadEnhanced } from "./OfflineDownloadEnhanced"
+ import { PackageDownloadModal } from "./Download"
+ import { lazy } from "solid-js"
+ import { ModalWrapper } from "./ModalWrapper"
+ import { LocalSettings } from "./LocalSettings"
+ import { BackTop } from "./BackTop"
+ import { Decompress } from "./Decompress"
+-import { Share } from "./Share"
+ 
+ const Upload = lazy(() => import("../uploads/Upload"))
+ 
+@@ -30,11 +28,9 @@ export const Modal = () => {
+       <Decompress />
+       <NewFile />
+       <Mkdir />
+-      <Share />
+       <RecursiveMove />
+       <RemoveEmptyDirectory />
+       <BatchRename />
+-      <OfflineDownloadEnhanced />
+       <PackageDownloadModal />
+       <ModalWrapper name="upload" title="home.toolbar.upload">
+         <Upload />
+diff --git a/src/pages/home/toolbar/operations.ts b/src/pages/home/toolbar/operations.ts
+index 666a1d1..047208e 100644
+--- a/src/pages/home/toolbar/operations.ts
++++ b/src/pages/home/toolbar/operations.ts
+@@ -1,6 +1,6 @@
+ import { IconTypes } from "solid-icons"
+ import { TiDeleteOutline } from "solid-icons/ti"
+-import { CgRename, CgShare } from "solid-icons/cg"
++import { CgRename } from "solid-icons/cg"
+ import { TbArchive, TbFileArrowRight } from "solid-icons/tb"
+ import { TbCopy, TbLink } from "solid-icons/tb"
+ import { AiTwotoneDelete } from "solid-icons/ai"
+@@ -8,7 +8,6 @@ import { CgFileAdd, CgFolderAdd, CgFolderRemove } from "solid-icons/cg"
+ import { AiOutlineCloudDownload } from "solid-icons/ai"
+ import { ImMoveUp } from "solid-icons/im"
+ import { BiRegularRename } from "solid-icons/bi"
+-import { FaSolidMagnet } from "solid-icons/fa"
+ import { FiExternalLink } from "solid-icons/fi"
+ 
+ export interface Operations {
+@@ -33,8 +32,6 @@ export const operations: Operations = {
+   new_file: { icon: CgFileAdd, p: true },
+   cancel_select: { icon: TiDeleteOutline },
+   download: { icon: AiOutlineCloudDownload, color: "$primary9" },
+-  share: { icon: CgShare, color: "$primary9" },
+-  offline_download_torrent: { icon: FaSolidMagnet, color: "$accent9" },
+ }
+ // interface Operation {
+ //   label: string;
+diff --git a/src/pages/login/index.tsx b/src/pages/login/index.tsx
+index fec89c0..f91741b 100644
+--- a/src/pages/login/index.tsx
++++ b/src/pages/login/index.tsx
+@@ -3,7 +3,6 @@ import {
+   Center,
+   Flex,
+   Heading,
+-  Text,
+   Input,
+   Button,
+   useColorModeValue,
+@@ -295,9 +294,6 @@ const Login = () => {
+             >
+               {t("login.remember")}
+             </Checkbox>
+-            <Text as="a" target="_blank" href={t("login.forget_url")}>
+-              {t("login.forget")}
+-            </Text>
+           </Flex>
+         </Show>
+         <HStack w="$full" spacing="$2">
+@@ -330,19 +326,6 @@ const Login = () => {
+             {ldapLoginTips}
+           </Checkbox>
+         </Show>
+-        <Button
+-          w="$full"
+-          colorScheme="accent"
+-          onClick={() => {
+-            changeToken()
+-            to(
+-              decodeURIComponent(searchParams.redirect || base_path || "/"),
+-              true,
+-            )
+-          }}
+-        >
+-          {t("login.use_guest")}
+-        </Button>
+         <Flex
+           mt="$2"
+           justifyContent="space-evenly"
+diff --git a/src/pages/manage/About.tsx b/src/pages/manage/About.tsx
+deleted file mode 100644
+index 8526b3f..0000000
+--- a/src/pages/manage/About.tsx
++++ /dev/null
+@@ -1,23 +0,0 @@
+-import { createResource } from "solid-js"
+-import { Markdown, MaybeLoading } from "~/components"
+-import { useT, useManageTitle } from "~/hooks"
+-
+-const fetchReadme = async () =>
+-  await (
+-    await fetch(
+-      "https://raw.githubusercontent.com/OpenListTeam/OpenList/main/README.md",
+-    )
+-  ).text()
+-
+-const About = () => {
+-  const t = useT()
+-  useManageTitle("manage.sidemenu.about")
+-  const [readme] = createResource(fetchReadme)
+-  return (
+-    <MaybeLoading loading={readme.loading}>
+-      <Markdown children={readme()} sanitize={true} />
+-    </MaybeLoading>
+-  )
+-}
+-
+-export default About
+diff --git a/src/pages/manage/backup-restore.tsx b/src/pages/manage/backup-restore.tsx
+deleted file mode 100644
+index 650bd0b..0000000
+--- a/src/pages/manage/backup-restore.tsx
++++ /dev/null
+@@ -1,514 +0,0 @@
+-import {
+-  HStack,
+-  Button,
+-  VStack,
+-  Text,
+-  Switch as HopeSwitch,
+-  Input,
+-  FormControl,
+-  FormLabel,
+-  Flex,
+-} from "@hope-ui/solid"
+-import { r, handleRespWithoutNotify, notify } from "~/utils"
+-import { useFetch, useManageTitle, useT } from "~/hooks"
+-import {
+-  Meta,
+-  Storage,
+-  SettingItem,
+-  User,
+-  PResp,
+-  Resp,
+-  PEmptyResp,
+-  PPageResp,
+-  ShareInfo,
+-} from "~/types"
+-import { createSignal, For } from "solid-js"
+-import crypto from "crypto-js"
+-
+-interface Data {
+-  encrypted: string
+-  settings: SettingItem[]
+-  users: User[]
+-  storages: Storage[]
+-  metas: Meta[]
+-  shares: ShareInfo[]
+-}
+-type LogType = "success" | "error" | "info"
+-const LogMap = {
+-  success: {
+-    icon: "✅",
+-    color: "$success9",
+-  },
+-  error: {
+-    icon: "❌",
+-    color: "$danger9",
+-  },
+-  info: {
+-    icon: "ℹ️",
+-    color: "$info9",
+-  },
+-}
+-const Log = (props: { msg: string; type: LogType }) => {
+-  return (
+-    <HStack w="$full" spacing="$1">
+-      <Text>{LogMap[props.type].icon}</Text>
+-      <Text color={LogMap[props.type].color}>{props.msg}</Text>
+-    </HStack>
+-  )
+-}
+-
+-const BackupRestore = () => {
+-  const [override, setOverride] = createSignal(false)
+-  const [password, setPassword] = createSignal("")
+-  const t = useT()
+-  useManageTitle("manage.sidemenu.backup-restore")
+-  let logRef!: HTMLDivElement
+-  const [log, setLog] = createSignal<
+-    {
+-      type: LogType
+-      msg: string
+-    }[]
+-  >([])
+-  const appendLog = (msg: string, type: LogType) => {
+-    setLog((prev) => [...prev, { type, msg }])
+-    logRef.scrollTop = logRef.scrollHeight
+-  }
+-  const [getSettingsLoading, getSettings] = useFetch(
+-    (): PResp<any> => r.get("/admin/setting/list"),
+-  )
+-  const [getUsersLoading, getUsers] = useFetch(
+-    (): PPageResp<User> => r.get("/admin/user/list"),
+-  )
+-  const [getMetasLoading, getMetas] = useFetch(
+-    (): PPageResp<Meta> => r.get("/admin/meta/list"),
+-  )
+-  const [getStoragesLoading, getStorages] = useFetch(
+-    (): PPageResp<Storage> => r.get("/admin/storage/list"),
+-  )
+-  const [getSharesLoading, getShares] = useFetch(
+-    (): PPageResp<ShareInfo> => r.get("/share/list"),
+-  )
+-  const backupLoading = () => {
+-    return (
+-      getSettingsLoading() ||
+-      getUsersLoading() ||
+-      getMetasLoading() ||
+-      getStoragesLoading() ||
+-      getSharesLoading()
+-    )
+-  }
+-  function encrypt(data: any, key: string): string {
+-    if (key == "") return data
+-    const encJson = crypto.AES.encrypt(JSON.stringify(data), key).toString()
+-    return crypto.enc.Base64.stringify(crypto.enc.Utf8.parse(encJson))
+-  }
+-
+-  function decrypt(
+-    data: any,
+-    key: string,
+-    raw: boolean,
+-    encrypted: boolean,
+-  ): string {
+-    if (!encrypted) return data
+-    const decData = crypto.enc.Base64.parse(data).toString(crypto.enc.Utf8)
+-    if (raw) return crypto.AES.decrypt(decData, key).toString(crypto.enc.Utf8)
+-    return JSON.parse(
+-      crypto.AES.decrypt(decData, key).toString(crypto.enc.Utf8),
+-    )
+-  }
+-
+-  const backup = async () => {
+-    appendLog(t("br.start_backup"), "info")
+-    const allData: Data = {
+-      encrypted: "",
+-      settings: [],
+-      users: [],
+-      storages: [],
+-      metas: [],
+-      shares: [],
+-    }
+-    if (password() != "") allData.encrypted = encrypt("encrypted", password())
+-    for (const item of [
+-      { name: "settings", fn: getSettings, page: false },
+-      { name: "users", fn: getUsers, page: true },
+-      { name: "storages", fn: getStorages, page: true },
+-      { name: "metas", fn: getMetas, page: true },
+-      { name: "shares", fn: getShares, page: true },
+-    ] as const) {
+-      const resp = await item.fn()
+-      handleRespWithoutNotify(
+-        resp as Resp<any>,
+-        (data) => {
+-          appendLog(
+-            t("br.success_backup_item", {
+-              item: t(`manage.sidemenu.${item.name}`),
+-            }),
+-            "success",
+-          )
+-          if (item.page) {
+-            for (let i = 0; i < data.content.length; i++) {
+-              const obj = data.content[i]
+-              for (const key in obj) {
+-                obj[key] = encrypt(obj[key], password())
+-              }
+-            }
+-            allData[item.name] = data.content
+-          } else {
+-            for (let i = 0; i < data.length; i++) {
+-              const obj = data[i]
+-              for (const key in obj) {
+-                obj[key] = encrypt(obj[key], password())
+-              }
+-            }
+-            allData[item.name] = data
+-          }
+-        },
+-        (msg) => {
+-          appendLog(
+-            t("br.failed_backup_item", {
+-              item: t(`manage.sidemenu.${item.name}`),
+-            }) +
+-              ":" +
+-              msg,
+-            "error",
+-          )
+-        },
+-      )
+-    }
+-    download(
+-      "openlist_backup_" + new Date().toLocaleString() + ".json",
+-      allData,
+-    )
+-    appendLog(t("br.finish_backup"), "info")
+-  }
+-  const [addSettingsLoading, addSettings] = useFetch(
+-    (data: SettingItem[]): PEmptyResp => r.post("/admin/setting/save", data),
+-  )
+-  const [addUserLoading, addUser] = useFetch((user: User): PEmptyResp => {
+-    return r.post(`/admin/user/create`, user)
+-  })
+-  const [addStorageLoading, addStorage] = useFetch(
+-    (storage: Storage): PEmptyResp => {
+-      return r.post(`/admin/storage/create`, storage)
+-    },
+-  )
+-  const [addMetaLoading, addMeta] = useFetch((meta: Meta): PEmptyResp => {
+-    return r.post(`/admin/meta/create`, meta)
+-  })
+-  const [addShareLoading, addShare] = useFetch(
+-    (share: ShareInfo): PEmptyResp => {
+-      return r.post(`/share/create`, share)
+-    },
+-  )
+-  const [updateUserLoading, updateUser] = useFetch((user: User): PEmptyResp => {
+-    return r.post(`/admin/user/update`, user)
+-  })
+-  const [updateStorageLoading, updateStorage] = useFetch(
+-    (storage: Storage): PEmptyResp => {
+-      return r.post(`/admin/storage/update`, storage)
+-    },
+-  )
+-  const [updateMetaLoading, updateMeta] = useFetch((meta: Meta): PEmptyResp => {
+-    return r.post(`/admin/meta/update`, meta)
+-  })
+-  const [updateShareLoading, updateShare] = useFetch(
+-    (share: ShareInfo): PEmptyResp => {
+-      return r.post(`/share/update`, share)
+-    },
+-  )
+-  async function handleOvrData<T>(
+-    dataArray: T[],
+-    getDataFunc: { (): PResp<{ content: T[]; total: number }> },
+-    addDataFunc: {
+-      (t: T): PEmptyResp
+-    },
+-    updateDataFunc: {
+-      (t: T): PEmptyResp
+-    },
+-    idFieldName: keyof T,
+-    itemName: string,
+-  ) {
+-    const currentData = (await getDataFunc()).data.content
+-    for (const i in dataArray) {
+-      const currentItem = dataArray[i]
+-      const currentIdValue = currentItem[idFieldName]
+-      const currentDataItem = currentData.find(
+-        (d) => d[idFieldName] === currentIdValue,
+-      )
+-      const method = currentDataItem ? "update" : "add"
+-      const handleDataFunc = method === "add" ? addDataFunc : updateDataFunc
+-      await handleRespWithoutNotify(
+-        await handleDataFunc(currentItem),
+-        () => {
+-          appendLog(
+-            t("br.success_restore_item", {
+-              item: t(itemName),
+-            }) +
+-              "-" +
+-              `[${currentIdValue}]`,
+-            "success",
+-          )
+-        },
+-        (msg) => {
+-          appendLog(
+-            t("br.failed_restore_item", {
+-              item: t(itemName),
+-            }) +
+-              "-" +
+-              `[${currentIdValue}]` +
+-              ":" +
+-              msg,
+-            "error",
+-          )
+-        },
+-      )
+-    }
+-  }
+-  const restoreLoading = () => {
+-    return (
+-      addSettingsLoading() ||
+-      addUserLoading() ||
+-      addStorageLoading() ||
+-      addMetaLoading() ||
+-      addShareLoading() ||
+-      updateUserLoading() ||
+-      updateStorageLoading() ||
+-      updateMetaLoading() ||
+-      updateShareLoading()
+-    )
+-  }
+-  const restore = async () => {
+-    appendLog(t("br.start_restore"), "info")
+-    const file = document.createElement("input")
+-    file.type = "file"
+-    file.accept = "application/json"
+-    file.onchange = async (e) => {
+-      const files = (e.target as HTMLInputElement).files
+-      if (!files || files.length === 0) {
+-        notify.warning(t("br.no_file"))
+-        return
+-      }
+-      const file = files[0]
+-      const reader = new FileReader()
+-      reader.onload = async () => {
+-        const data: Data = JSON.parse(reader.result as string)
+-        const encrypted = Boolean(data.encrypted)
+-        if (encrypted)
+-          if (
+-            decrypt(data.encrypted, password(), true, true) !== '"encrypted"'
+-          ) {
+-            appendLog(t("br.wrong_encrypt_password"), "error")
+-            return
+-          }
+-        const dataArray = Object.values(data)
+-        for (let i = dataArray.length - 4; i < dataArray.length; i++) {
+-          const obj = dataArray[i]
+-          console.log(obj)
+-          for (let a = 0; a < obj.length; a++) {
+-            const obj1 = obj[a]
+-            for (const key in obj1) {
+-              obj1[key] = decrypt(obj1[key], password(), false, encrypted)
+-            }
+-          }
+-        }
+-        if (override()) {
+-          await backup()
+-        }
+-        data.settings &&
+-          handleRespWithoutNotify(
+-            await addSettings(
+-              data.settings.filter(
+-                (s) => !["version", "index_progress"].includes(s.key),
+-              ),
+-            ),
+-            () => {
+-              appendLog(
+-                t("br.success_restore_item", {
+-                  item: t("manage.sidemenu.settings"),
+-                }),
+-                "success",
+-              )
+-            },
+-            (msg) => {
+-              appendLog(
+-                t("br.failed_restore_item", {
+-                  item: t("manage.sidemenu.settings"),
+-                }) +
+-                  ":" +
+-                  msg,
+-                "error",
+-              )
+-            },
+-          )
+-        if (override()) {
+-          await handleOvrData(
+-            data.users,
+-            getUsers,
+-            addUser,
+-            updateUser,
+-            "username",
+-            "manage.sidemenu.users",
+-          )
+-          await handleOvrData(
+-            data.storages,
+-            getStorages,
+-            addStorage,
+-            updateStorage,
+-            "mount_path",
+-            "manage.sidemenu.storages",
+-          )
+-          await handleOvrData(
+-            data.metas,
+-            getMetas,
+-            addMeta,
+-            updateMeta,
+-            "path",
+-            "manage.sidemenu.metas",
+-          )
+-          await handleOvrData(
+-            data.shares,
+-            getShares,
+-            addShare,
+-            updateShare,
+-            "id",
+-            "manage.sidemenu.shares",
+-          )
+-        } else {
+-          for (const item of [
+-            {
+-              name: "users",
+-              fn: addUser,
+-              data: data.users,
+-              key: "username",
+-              removeId: true,
+-            },
+-            {
+-              name: "storages",
+-              fn: addStorage,
+-              data: data.storages,
+-              key: "mount_path",
+-              removeId: true,
+-            },
+-            {
+-              name: "metas",
+-              fn: addMeta,
+-              data: data.metas,
+-              key: "path",
+-              removeId: true,
+-            },
+-            {
+-              name: "shares",
+-              fn: addShare,
+-              data: data.shares,
+-              key: "id",
+-              removeId: false,
+-            },
+-          ] as const) {
+-            for (const itemData of item.data || []) {
+-              if (item.removeId) {
+-                itemData.id = 0
+-              }
+-              handleRespWithoutNotify(
+-                await item.fn(itemData),
+-                () => {
+-                  appendLog(
+-                    t("br.success_restore_item", {
+-                      item: t(`manage.sidemenu.${item.name}`),
+-                    }) +
+-                      "-" +
+-                      `[${(itemData as any)[item.key]}]`,
+-                    "success",
+-                  )
+-                },
+-                (msg) => {
+-                  appendLog(
+-                    t("br.failed_restore_item", {
+-                      item: t(`manage.sidemenu.${item.name}`),
+-                    }) +
+-                      ` [ ${(itemData as any)[item.key]} ] ` +
+-                      ":" +
+-                      msg,
+-                    "error",
+-                  )
+-                },
+-              )
+-            }
+-          }
+-        }
+-        appendLog(t("br.finish_restore"), "info")
+-      }
+-      reader.readAsText(file)
+-    }
+-    file.click()
+-  }
+-  return (
+-    <VStack spacing="$2" w="$full">
+-      <HStack spacing="$2" w="$full">
+-        <Button
+-          loading={backupLoading()}
+-          onClick={() => {
+-            backup()
+-          }}
+-          colorScheme="accent"
+-        >
+-          {t("br.backup")}
+-        </Button>
+-        <Button
+-          loading={restoreLoading()}
+-          onClick={() => {
+-            restore()
+-          }}
+-        >
+-          {t("br.restore")}
+-        </Button>
+-      </HStack>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <Flex w="$full" direction="column" gap="$1">
+-          <FormLabel>{t(`br.override`)}</FormLabel>
+-          <HopeSwitch
+-            id="restore-override"
+-            checked={override()}
+-            onChange={(e: { currentTarget: HTMLInputElement }) =>
+-              setOverride(e.currentTarget.checked)
+-            }
+-          ></HopeSwitch>
+-
+-          <FormLabel>{t(`br.encrypt_password`)}</FormLabel>
+-          <Input
+-            id="password"
+-            type="password"
+-            placeholder={t(`br.encrypt_password_placeholder`)}
+-            onInput={(e) => setPassword(e.currentTarget.value)}
+-          />
+-        </Flex>
+-      </FormControl>
+-      <VStack
+-        p="$2"
+-        ref={logRef!}
+-        w="$full"
+-        alignItems="start"
+-        rounded="$md"
+-        h="70vh"
+-        bg="$neutral3"
+-        overflowY="auto"
+-        spacing="$1"
+-      >
+-        <For each={log()}>{(item) => <Log {...item} />}</For>
+-      </VStack>
+-    </VStack>
+-  )
+-}
+-
+-function download(filename: string, data: any) {
+-  const file = new Blob([JSON.stringify(data, null, 2)], {
+-    type: "application/json",
+-  })
+-  const url = URL.createObjectURL(file)
+-  const a = document.createElement("a")
+-  a.href = url
+-  a.download = filename
+-  a.click()
+-  URL.revokeObjectURL(url)
+-}
+-
+-export default BackupRestore
+diff --git a/src/pages/manage/routes.tsx b/src/pages/manage/routes.tsx
+index 5fa444d..03d6429 100644
+--- a/src/pages/manage/routes.tsx
++++ b/src/pages/manage/routes.tsx
+@@ -15,14 +15,6 @@ const hide_routes: Route[] = [
+     to: "/storages/edit/:id",
+     component: lazy(() => import("./storages/AddOrEdit")),
+   },
+-  {
+-    to: "/shares/add",
+-    component: lazy(() => import("./shares/AddOrEdit")),
+-  },
+-  {
+-    to: "/shares/edit/:id",
+-    component: lazy(() => import("./shares/AddOrEdit")),
+-  },
+   {
+     to: "/users/add",
+     component: lazy(() => import("./users/AddOrEdit")),
+diff --git a/src/pages/manage/settings/Other.tsx b/src/pages/manage/settings/Other.tsx
+index 1bd35f0..4f866c5 100644
+--- a/src/pages/manage/settings/Other.tsx
++++ b/src/pages/manage/settings/Other.tsx
+@@ -1,459 +1,56 @@
+-import {
+-  Button,
+-  FormControl,
+-  FormLabel,
+-  Heading,
+-  HStack,
+-  Input,
+-  SimpleGrid,
+-} from "@hope-ui/solid"
++import { Button, Heading, HStack, Input, VStack } from "@hope-ui/solid"
+ import { createSignal } from "solid-js"
+-import { FolderChooseInput, MaybeLoading } from "~/components"
++import { MaybeLoading } from "~/components"
+ import { useFetch, useManageTitle, useT, useUtil } from "~/hooks"
+-import { Group, SettingItem, PResp } from "~/types"
++import { Group, PResp, SettingItem } from "~/types"
+ import { handleResp, notify, r } from "~/utils"
+-import { Item } from "./SettingItem"
+ 
+ const OtherSettings = () => {
+   const t = useT()
+-  useManageTitle("manage.sidemenu.other")
+-  const [uri, setUri] = createSignal("")
+-  const [secret, setSecret] = createSignal("")
+-  const [qbitUrl, setQbitUrl] = createSignal("")
+-  const [pan123TempDir, set123TempDir] = createSignal("")
+-  const [qbitSeedTime, setQbitSeedTime] = createSignal("")
+-  const [transmissionUrl, setTransmissionUrl] = createSignal("")
+-  const [transmissionSeedTime, setTransmissionSeedTime] = createSignal("")
+-  const [pan115TempDir, set115TempDir] = createSignal("")
+-  const [pan115OpenTempDir, set115OpenTempDir] = createSignal("")
+-  const [pan123OpenTempDir, set123OpenTempDir] = createSignal("")
+-  const [pan123OpenCallbackUrl, set123OpenCallbackUrl] = createSignal("")
+-  const [pikpakTempDir, setPikPakTempDir] = createSignal("")
+-  const [thunderTempDir, setThunderTempDir] = createSignal("")
+-  const [thunderBrowserTempDir, setThunderBrowserTempDir] = createSignal("")
+-  const [thunderXTempDir, setThunderXTempDir] = createSignal("")
++  const { copy } = useUtil()
+   const [token, setToken] = createSignal("")
+-  const [settings, setSettings] = createSignal<SettingItem[]>([])
++  useManageTitle("manage.sidemenu.other")
++
+   const [settingsLoading, settingsData] = useFetch(
+     (): PResp<SettingItem[]> =>
+-      r.get(`/admin/setting/list?groups=${Group.ARIA2},${Group.SINGLE}`),
+-  )
+-  const [setAria2Loading, setAria2] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_aria2", { uri: uri(), secret: secret() }),
+-  )
+-  const [setQbitLoading, setQbit] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_qbit", {
+-        url: qbitUrl(),
+-        seedtime: qbitSeedTime(),
+-      }),
+-  )
+-  const [setTransmissionLoading, setTransmission] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_transmission", {
+-        uri: transmissionUrl(),
+-        seedtime: transmissionSeedTime(),
+-      }),
+-  )
+-  const [set123PanLoading, set123Pan] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_123_pan", {
+-        temp_dir: pan123TempDir(),
+-      }),
+-  )
+-  const [set115Loading, set115] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_115", {
+-        temp_dir: pan115TempDir(),
+-      }),
+-  )
+-  const [set115OpenLoading, set115Open] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_115_open", {
+-        temp_dir: pan115OpenTempDir(),
+-      }),
+-  )
+-  const [set123OpenLoading, set123Open] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_123_open", {
+-        temp_dir: pan123OpenTempDir(),
+-        callback_url: pan123OpenCallbackUrl(),
+-      }),
+-  )
+-  const [setPikPakLoading, setPikPak] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_pikpak", {
+-        temp_dir: pikpakTempDir(),
+-      }),
+-  )
+-  const [setThunderLoading, setThunder] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_thunder", {
+-        temp_dir: thunderTempDir(),
+-      }),
+-  )
+-  const [setThunderXLoading, setThunderX] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_thunderx", {
+-        temp_dir: thunderXTempDir(),
+-      }),
+-  )
+-  const [setThunderBrowserLoading, setThunderBrowser] = useFetch(
+-    (): PResp<string> =>
+-      r.post("/admin/setting/set_thunder_browser", {
+-        temp_dir: thunderBrowserTempDir(),
+-      }),
++      r.get(`/admin/setting/list?group=${Group.SINGLE}`),
+   )
+   const refresh = async () => {
+     const resp = await settingsData()
+     handleResp(resp, (data) => {
+-      setUri(data.find((i) => i.key === "aria2_uri")?.value || "")
+-      setSecret(data.find((i) => i.key === "aria2_secret")?.value || "")
+-      setToken(data.find((i) => i.key === "token")?.value || "")
+-      setQbitUrl(data.find((i) => i.key === "qbittorrent_url")?.value || "")
+-      set123TempDir(data.find((i) => i.key === "123_pan_temp_dir")?.value || "")
+-      setQbitSeedTime(
+-        data.find((i) => i.key === "qbittorrent_seedtime")?.value || "",
+-      )
+-      setTransmissionUrl(
+-        data.find((i) => i.key === "transmission_uri")?.value || "",
+-      )
+-      setTransmissionSeedTime(
+-        data.find((i) => i.key === "transmission_seedtime")?.value || "",
+-      )
+-      set115TempDir(data.find((i) => i.key === "115_temp_dir")?.value || "")
+-      set115OpenTempDir(
+-        data.find((i) => i.key === "115_open_temp_dir")?.value || "",
+-      )
+-      set123OpenTempDir(
+-        data.find((i) => i.key == "123_open_temp_dir")?.value || "",
+-      )
+-      set123OpenCallbackUrl(
+-        data.find((i) => i.key === "123_open_callback_url")?.value || "",
+-      )
+-      setPikPakTempDir(
+-        data.find((i) => i.key === "pikpak_temp_dir")?.value || "",
+-      )
+-      setThunderTempDir(
+-        data.find((i) => i.key === "thunder_temp_dir")?.value || "",
+-      )
+-      setThunderXTempDir(
+-        data.find((i) => i.key === "thunderx_temp_dir")?.value || "",
+-      )
+-      setThunderBrowserTempDir(
+-        data.find((i) => i.key === "thunder_browser_temp_dir")?.value || "",
+-      )
+-      setSettings(data)
++      setToken(data.find((item) => item.key === "token")?.value || "")
+     })
+   }
+   refresh()
++
+   const [resetTokenLoading, resetToken] = useFetch(
+     (): PResp<string> => r.post("/admin/setting/reset_token"),
+   )
+-  const { copy } = useUtil()
+ 
+   return (
+     <MaybeLoading loading={settingsLoading()}>
+-      <Heading mb="$2">{t("settings_other.aria2")}</Heading>
+-      <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
+-        <Item
+-          {...settings().find((i) => i.key === "aria2_uri")!}
+-          value={uri()}
+-          onChange={(str) => setUri(str)}
+-        />
+-        <Item
+-          {...settings().find((i) => i.key === "aria2_secret")!}
+-          value={secret()}
+-          onChange={(str) => setSecret(str)}
+-        />
+-      </SimpleGrid>
+-      <Button
+-        my="$2"
+-        loading={setAria2Loading()}
+-        onClick={async () => {
+-          const resp = await setAria2()
+-          handleResp(resp, (data) => {
+-            notify.success(`${t("settings_other.aria2_version")} ${data}`)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.qbittorrent")}</Heading>
+-      <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
+-        <Item
+-          {...settings().find((i) => i.key === "qbittorrent_url")!}
+-          value={qbitUrl()}
+-          onChange={(str) => setQbitUrl(str)}
+-        />
+-        <Item
+-          {...settings().find((i) => i.key === "qbittorrent_seedtime")!}
+-          value={qbitSeedTime()}
+-          onChange={(str) => setQbitSeedTime(str)}
+-        />
+-      </SimpleGrid>
+-      <Button
+-        my="$2"
+-        loading={setQbitLoading()}
+-        onClick={async () => {
+-          const resp = await setQbit()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.transmission")}</Heading>
+-      <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
+-        <Item
+-          {...settings().find((i) => i.key === "transmission_uri")!}
+-          value={transmissionUrl()}
+-          onChange={(str) => setTransmissionUrl(str)}
+-        />
+-        <Item
+-          {...settings().find((i) => i.key === "transmission_seedtime")!}
+-          value={transmissionSeedTime()}
+-          onChange={(str) => setTransmissionSeedTime(str)}
+-        />
+-      </SimpleGrid>
+-      <Button
+-        my="$2"
+-        loading={setTransmissionLoading()}
+-        onClick={async () => {
+-          const resp = await setTransmission()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.115")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="115_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.115_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="115_temp_dir"
+-          value={pan115TempDir()}
+-          onChange={(path) => set115TempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={set115Loading()}
+-        onClick={async () => {
+-          const resp = await set115()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.115_open")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="115_open_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.115_open_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="115_open_temp_dir"
+-          value={pan115OpenTempDir()}
+-          onChange={(path) => set115OpenTempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={set115OpenLoading()}
+-        onClick={async () => {
+-          const resp = await set115Open()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.123_pan")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="123_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.123_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="123_temp_dir"
+-          value={pan123TempDir()}
+-          onChange={(path) => set123TempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={set123PanLoading()}
+-        onClick={async () => {
+-          const resp = await set123Pan()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.123_open")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="123_open_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.123_open_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="123_open_temp_dir"
+-          value={pan123OpenTempDir()}
+-          onChange={(path) => set123OpenTempDir(path)}
+-        />
+-        <FormLabel
+-          for="123_open_callback_url"
+-          display="flex"
+-          alignItems="center"
+-        >
+-          {t("settings_other.123_open_callback_url")}
+-        </FormLabel>
+-        <Input
+-          id="123_open_callback_url"
+-          value={pan123OpenCallbackUrl()}
+-          onInput={(e) => set123OpenCallbackUrl(e.target.value)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={set123OpenLoading()}
+-        onClick={async () => {
+-          const resp = await set123Open()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.pikpak")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="pikpak_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.pikpak_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="pikpak_temp_dir"
+-          value={pikpakTempDir()}
+-          onChange={(path) => setPikPakTempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={setPikPakLoading()}
+-        onClick={async () => {
+-          const resp = await setPikPak()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.thunder")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="thunder_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.thunder_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="thunder_temp_dir"
+-          value={thunderTempDir()}
+-          onChange={(path) => setThunderTempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={setThunderLoading()}
+-        onClick={async () => {
+-          const resp = await setThunder()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.thunder_browser")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel
+-          for="thunder_browser_temp_dir"
+-          display="flex"
+-          alignItems="center"
+-        >
+-          {t("settings_other.thunder_browser_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="thunder_browser_temp_dir"
+-          value={thunderBrowserTempDir()}
+-          onChange={(path) => setThunderBrowserTempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={setThunderBrowserLoading()}
+-        onClick={async () => {
+-          const resp = await setThunderBrowser()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings_other.thunderx")}</Heading>
+-      <FormControl w="$full" display="flex" flexDirection="column">
+-        <FormLabel for="thunderX_temp_dir" display="flex" alignItems="center">
+-          {t("settings_other.thunderX_temp_dir")}
+-        </FormLabel>
+-        <FolderChooseInput
+-          id="thunderX_temp_dir"
+-          value={thunderXTempDir()}
+-          onChange={(path) => setThunderXTempDir(path)}
+-        />
+-      </FormControl>
+-      <Button
+-        my="$2"
+-        loading={setThunderXLoading()}
+-        onClick={async () => {
+-          const resp = await setThunderX()
+-          handleResp(resp, (data) => {
+-            notify.success(data)
+-          })
+-        }}
+-      >
+-        {t("global.save")}
+-      </Button>
+-      <Heading my="$2">{t("settings.token")}</Heading>
+-      <Input value={token()} readOnly />
+-      <HStack my="$2" spacing="$2">
+-        <Button
+-          onClick={() => {
+-            copy(token())
+-          }}
+-        >
+-          {t("settings_other.copy_token")}
+-        </Button>
+-        <Button
+-          colorScheme="danger"
+-          loading={resetTokenLoading()}
+-          onClick={async () => {
+-            const resp = await resetToken()
+-            handleResp(resp, (data) => {
+-              notify.success(t("settings_other.reset_token_success"))
+-              setToken(data)
+-            })
+-          }}
+-        >
+-          {t("settings_other.reset_token")}
+-        </Button>
+-      </HStack>
++      <VStack alignItems="start" spacing="$2">
++        <Heading>{t("settings.token")}</Heading>
++        <Input value={token()} readOnly />
++        <HStack spacing="$2">
++          <Button onClick={() => copy(token())}>
++            {t("settings_other.copy_token")}
++          </Button>
++          <Button
++            colorScheme="danger"
++            loading={resetTokenLoading()}
++            onClick={async () => {
++              const resp = await resetToken()
++              handleResp(resp, (data) => {
++                notify.success(t("settings_other.reset_token_success"))
++                setToken(data)
++              })
++            }}
++          >
++            {t("settings_other.reset_token")}
++          </Button>
++        </HStack>
++      </VStack>
+     </MaybeLoading>
+   )
+ }
+diff --git a/src/pages/manage/shares/AddOrEdit.tsx b/src/pages/manage/shares/AddOrEdit.tsx
+deleted file mode 100644
+index 49ec1b6..0000000
+--- a/src/pages/manage/shares/AddOrEdit.tsx
++++ /dev/null
+@@ -1,211 +0,0 @@
+-import { useFetch, useRouter, useT } from "~/hooks"
+-import { PResp, Share, ShareInfo, ShareUpdate, Type } from "~/types"
+-import { handleResp, notify, r, randomPwd, getExpireDate } from "~/utils"
+-import { createStore } from "solid-js/store"
+-import { Button, Heading } from "@hope-ui/solid"
+-import { MaybeLoading } from "~/components"
+-import { ResponsiveGrid } from "../common/ResponsiveGrid"
+-import { batch, createSignal, Show } from "solid-js"
+-import { Item } from "./Item"
+-import { me } from "~/store"
+-
+-const AddOrEdit = () => {
+-  const t = useT()
+-  const { params, back, to } = useRouter()
+-  const { id } = params
+-  const [shareLoading, loadShare] = useFetch(
+-    (): PResp<ShareInfo> => r.get(`/share/get?id=${id}`),
+-    true,
+-  )
+-  const [share, setShare] = createStore<Share | ShareUpdate>({} as Share)
+-  const [files, setFiles] = createSignal("")
+-  const [filesValid, setFilesValid] = createSignal(false)
+-  const [expireString, setExpireString] = createSignal("")
+-  const [expireValid, setExpireValid] = createSignal(true)
+-  const initEdit = async () => {
+-    const shareResp = await loadShare()
+-    handleResp(shareResp, (shareData) => {
+-      batch(() => {
+-        setShare(shareData as ShareUpdate)
+-        setFiles(shareData.files.join("\n"))
+-        if (shareData.expires) {
+-          setExpireString(new Date(shareData.expires).toLocaleString())
+-        }
+-        setFilesValid(true)
+-      })
+-    })
+-  }
+-  if (id) {
+-    initEdit()
+-  }
+-  const [okLoading, ok] = useFetch((): PResp<ShareInfo> => {
+-    return r.post(`/share/${id ? "update" : "create"}`, share)
+-  })
+-  return (
+-    <MaybeLoading loading={id ? shareLoading() : false}>
+-      <Heading mb="$2">{t(`global.${id ? "edit" : "add"}`)}</Heading>
+-      <ResponsiveGrid>
+-        <Item
+-          name="id"
+-          type={Type.String}
+-          value={id ? ((share as ShareUpdate).new_id ?? id) : (share.id ?? "")}
+-          valid
+-          placeholder={id ? id : t("shares.id_placeholder")}
+-          onChange={(v) => {
+-            if (id) {
+-              setShare({ ...share, new_id: v } as any)
+-            } else {
+-              setShare({ ...share, id: v } as any)
+-            }
+-          }}
+-        />
+-        <Item
+-          name="files"
+-          type={Type.MultiPath}
+-          value={files()}
+-          valid={filesValid()}
+-          basePath={me().base_path}
+-          required
+-          onChange={(f) => {
+-            setFiles(f)
+-            setFilesValid(f.length > 0)
+-            setShare("files", f.split("\n"))
+-          }}
+-        />
+-        <Item
+-          name="remark"
+-          type={Type.Text}
+-          value={share.remark}
+-          valid
+-          onChange={(r) => {
+-            setShare("remark", r)
+-          }}
+-        />
+-        <Item
+-          name="extract_folder"
+-          type={Type.Select}
+-          value={share.extract_folder}
+-          valid
+-          options="front,back"
+-          onChange={(o: any) => {
+-            setShare("extract_folder", o)
+-          }}
+-        />
+-        <Item
+-          name="order_by"
+-          type={Type.Select}
+-          value={share.order_by}
+-          valid
+-          options="name,size,modified"
+-          onChange={(o: any) => {
+-            setShare("order_by", o)
+-          }}
+-        />
+-        <Item
+-          name="order_direction"
+-          type={Type.Select}
+-          value={share.order_direction}
+-          valid
+-          options="asc,desc"
+-          onChange={(o: any) => {
+-            setShare("order_direction", o)
+-          }}
+-        />
+-        <Item
+-          name="pwd"
+-          type={Type.String}
+-          value={share.pwd}
+-          valid
+-          onChange={(p) => {
+-            setShare("pwd", p)
+-          }}
+-          random={randomPwd}
+-        />
+-        <Item
+-          name="max_accessed"
+-          type={Type.Number}
+-          value={share.max_accessed}
+-          valid
+-          onChange={(m) => {
+-            setShare("max_accessed", m)
+-          }}
+-        />
+-        <Show when={id}>
+-          <Item
+-            name="accessed"
+-            type={Type.Number}
+-            value={(share as ShareUpdate).accessed}
+-            valid
+-            onChange={(a) => {
+-              setShare({ ...share, accessed: a })
+-            }}
+-          />
+-        </Show>
+-        <Item
+-          name="expires"
+-          type={Type.String}
+-          value={expireString()}
+-          valid={expireValid()}
+-          placeholder="yyyy-MM-dd HH:mm:ss or +1w1d1H1m1s1ms"
+-          onChange={(e) => {
+-            setExpireString(e)
+-            if (e === "") {
+-              setExpireValid(true)
+-              setShare("expires", null)
+-              return
+-            }
+-            const date = getExpireDate(e)
+-            if (isNaN(date.getTime())) {
+-              setExpireValid(false)
+-            } else {
+-              setExpireValid(true)
+-              setShare("expires", date.toISOString())
+-            }
+-          }}
+-        />
+-        <Item
+-          name="readme"
+-          type={Type.Text}
+-          value={share.readme}
+-          valid
+-          onChange={(r) => {
+-            setShare("readme", r)
+-          }}
+-        />
+-        <Item
+-          name="header"
+-          type={Type.Text}
+-          value={share.header}
+-          valid
+-          onChange={(h) => {
+-            setShare("header", h)
+-          }}
+-        />
+-      </ResponsiveGrid>
+-      <Button
+-        mt="$2"
+-        disabled={!expireValid() || !filesValid()}
+-        loading={okLoading()}
+-        onClick={async () => {
+-          const resp = await ok()
+-          handleResp(
+-            resp,
+-            () => {
+-              notify.success(t("global.save_success"))
+-              back()
+-            },
+-            (_msg, _code) => {
+-              if (resp.data.id) {
+-                to(`/@manage/shares/edit/${resp.data.id}`)
+-              }
+-            },
+-          )
+-        }}
+-      >
+-        {t(`global.${id ? "save" : "add"}`)}
+-      </Button>
+-    </MaybeLoading>
+-  )
+-}
+-
+-export default AddOrEdit
+diff --git a/src/pages/manage/shares/Item.tsx b/src/pages/manage/shares/Item.tsx
+deleted file mode 100644
+index 530a91b..0000000
+--- a/src/pages/manage/shares/Item.tsx
++++ /dev/null
+@@ -1,207 +0,0 @@
+-import { Type } from "~/types"
+-import { useT } from "~/hooks"
+-import {
+-  Center,
+-  FormControl,
+-  FormLabel,
+-  HStack,
+-  IconButton,
+-  Input,
+-  Select,
+-  Switch as HopeSwitch,
+-  Textarea,
+-} from "@hope-ui/solid"
+-import { Match, Show, Switch } from "solid-js"
+-import { SelectOptions, MultiPathInput } from "~/components"
+-import { TbRefresh } from "solid-icons/tb"
+-
+-export type ItemProps = {
+-  name: string
+-  required?: boolean
+-  readonly?: boolean
+-  full_name_path?: string
+-  options?: string
+-  options_prefix?: string
+-  valid?: boolean
+-  placeholder?: string
+-} & (
+-  | {
+-      type: Type.Bool
+-      onChange?: (value: boolean) => void
+-      value: boolean
+-    }
+-  | {
+-      type: Type.Number
+-      onChange?: (value: number) => void
+-      value: number
+-    }
+-  | {
+-      type: Type.Float
+-      onChange?: (value: number) => void
+-      value: number
+-    }
+-  | {
+-      type: Type.String | Type.Text
+-      onChange?: (value: string) => void
+-      value: string
+-      random?: () => string
+-    }
+-  | {
+-      type: Type.MultiPath
+-      onChange?: (value: string) => void
+-      value: string
+-      basePath?: string
+-    }
+-  | {
+-      type: Type.Select
+-      searchable?: boolean
+-      onChange?: (value: string) => void
+-      value: string
+-    }
+-)
+-
+-const Item = (props: ItemProps) => {
+-  const t = useT()
+-  return (
+-    <FormControl
+-      w="$full"
+-      display="flex"
+-      flexDirection="column"
+-      required={props.required}
+-    >
+-      <FormLabel for={props.name} display="flex" alignItems="center">
+-        {t(props.full_name_path ?? `shares.${props.name}`)}
+-      </FormLabel>
+-      <Switch fallback={<Center>{t("settings.unknown_type")}</Center>}>
+-        <Match when={props.type === Type.String}>
+-          <HStack w="$full" spacing="$2">
+-            <Input
+-              id={props.name}
+-              type="text"
+-              readOnly={props.readonly}
+-              value={props.value as string}
+-              invalid={!props.valid}
+-              placeholder={props.placeholder}
+-              onChange={
+-                props.type === Type.String
+-                  ? (e) => props.onChange?.(e.currentTarget.value)
+-                  : undefined
+-              }
+-            />
+-            <Show when={props.type === Type.String && props.random}>
+-              <IconButton
+-                colorScheme="neutral"
+-                aria-label="random"
+-                icon={<TbRefresh />}
+-                onClick={
+-                  props.type === Type.String
+-                    ? () => props.onChange?.(props.random!())
+-                    : undefined
+-                }
+-              />
+-            </Show>
+-          </HStack>
+-        </Match>
+-        <Match when={props.type === Type.Number}>
+-          <Input
+-            type="number"
+-            id={props.name}
+-            readOnly={props.readonly}
+-            value={props.value as number}
+-            invalid={!props.valid}
+-            placeholder={props.placeholder}
+-            onInput={
+-              props.type === Type.Number
+-                ? (e) => props.onChange?.(parseInt(e.currentTarget.value))
+-                : undefined
+-            }
+-          />
+-        </Match>
+-        <Match when={props.type === Type.Float}>
+-          <Input
+-            type="number"
+-            id={props.name}
+-            readOnly={props.readonly}
+-            value={props.value as number}
+-            invalid={!props.valid}
+-            placeholder={props.placeholder}
+-            onInput={
+-              props.type === Type.Float
+-                ? (e) => props.onChange?.(parseFloat(e.currentTarget.value))
+-                : undefined
+-            }
+-          />
+-        </Match>
+-        <Match when={props.type === Type.Bool}>
+-          <HopeSwitch
+-            id={props.name}
+-            readOnly={props.readonly}
+-            defaultChecked={props.value as boolean}
+-            invalid={!props.valid}
+-            onChange={
+-              props.type === Type.Bool
+-                ? (e: any) => props.onChange?.(e.currentTarget.checked)
+-                : undefined
+-            }
+-          />
+-        </Match>
+-        <Match when={props.type === Type.Text}>
+-          <Textarea
+-            id={props.name}
+-            readOnly={props.readonly}
+-            value={props.value as string}
+-            invalid={!props.valid}
+-            placeholder={props.placeholder}
+-            onChange={
+-              props.type === Type.Text
+-                ? (e) => props.onChange?.(e.currentTarget.value)
+-                : undefined
+-            }
+-          />
+-        </Match>
+-        <Match when={props.type === Type.MultiPath}>
+-          <MultiPathInput
+-            id={props.name}
+-            value={props.value as string}
+-            valid={props.valid}
+-            readOnly={props.readonly}
+-            basePath={
+-              props.type === Type.MultiPath ? props.basePath : undefined
+-            }
+-            onChange={(value) => {
+-              if (props.type === Type.MultiPath) {
+-                props.onChange?.(value)
+-              }
+-            }}
+-          />
+-        </Match>
+-        <Match when={props.type === Type.Select}>
+-          <Select
+-            id={props.name}
+-            readOnly={props.readonly}
+-            value={props.value}
+-            invalid={!props.valid}
+-            onChange={
+-              props.type === Type.Select
+-                ? (e) => props.onChange?.(e)
+-                : undefined
+-            }
+-          >
+-            <SelectOptions
+-              readonly={props.readonly}
+-              searchable={props.type === Type.Select && props.searchable}
+-              options={props.options!.split(",").map((key) => ({
+-                key,
+-                label: t(
+-                  (props.options_prefix ?? `shares.${props.name}s`) + `.${key}`,
+-                ),
+-              }))}
+-            />
+-          </Select>
+-        </Match>
+-      </Switch>
+-    </FormControl>
+-  )
+-}
+-
+-export { Item }
+diff --git a/src/pages/manage/shares/Share.tsx b/src/pages/manage/shares/Share.tsx
+deleted file mode 100644
+index 34c61a3..0000000
+--- a/src/pages/manage/shares/Share.tsx
++++ /dev/null
+@@ -1,164 +0,0 @@
+-import { PEmptyResp, ShareInfo, UserMethods } from "~/types"
+-import { useFetch, useRouter, useT, useUtil } from "~/hooks"
+-import { Badge, Button, HStack, Td, Tr } from "@hope-ui/solid"
+-import {
+-  handleResp,
+-  handleRespWithNotifySuccess,
+-  makeTemplateData,
+-  matchTemplate,
+-  notify,
+-  r,
+-} from "~/utils"
+-import { DeletePopover } from "../common/DeletePopover"
+-import { getSetting, me } from "~/store"
+-import { Show } from "solid-js"
+-
+-interface ShareProps {
+-  share: ShareInfo
+-  refresh: () => void
+-  canShare: boolean
+-}
+-
+-function ShareOp(props: ShareProps) {
+-  const t = useT()
+-  const { to } = useRouter()
+-  const [deleteLoading, deleteStorage] = useFetch(
+-    (): PEmptyResp => r.post(`/share/delete?id=${props.share.id}`),
+-  )
+-  const [enableOrDisableLoading, enableOrDisable] = useFetch(
+-    (): PEmptyResp =>
+-      r.post(
+-        `/share/${props.share.disabled ? "enable" : "disable"}?id=${props.share.id}`,
+-      ),
+-  )
+-  return (
+-    <>
+-      <Button
+-        disabled={!props.canShare}
+-        onClick={() => {
+-          to(`/@manage/shares/edit/${props.share.id}`)
+-        }}
+-      >
+-        {t("global.edit")}
+-      </Button>
+-      <Button
+-        loading={enableOrDisableLoading()}
+-        colorScheme={props.share.disabled ? "success" : "warning"}
+-        onClick={async () => {
+-          const resp = await enableOrDisable()
+-          handleRespWithNotifySuccess(resp, () => {
+-            props.refresh()
+-          })
+-        }}
+-      >
+-        {t(`global.${props.share.disabled ? "enable" : "disable"}`)}
+-      </Button>
+-      <DeletePopover
+-        name={props.share.id}
+-        loading={deleteLoading()}
+-        onClick={async () => {
+-          const resp = await deleteStorage()
+-          handleResp(resp, () => {
+-            notify.success(t("global.delete_success"))
+-            props.refresh()
+-          })
+-        }}
+-      />
+-    </>
+-  )
+-}
+-
+-const Creator = (props: { name: string; role: number }) => {
+-  if (props.role < 0) return null
+-  const roleColors = ["info", "neutral", "accent"]
+-  return (
+-    <Badge
+-      colorScheme={roleColors[props.role] as any}
+-      css={{
+-        overflow: "hidden",
+-        whiteSpace: "nowrap",
+-        textOverflow: "ellipsis",
+-      }}
+-    >
+-      {props.name}
+-    </Badge>
+-  )
+-}
+-
+-export function ShareListItem(props: ShareProps) {
+-  const t = useT()
+-  const path = () => {
+-    if (props.share.files.length === 0) {
+-      return ""
+-    }
+-    let p = props.share.files[0]
+-    if (props.share.files.length > 1) {
+-      p += t("shares.files_etc", {
+-        more: props.share.files.length - 1,
+-      })
+-    }
+-    return p
+-  }
+-  const accessed = () => {
+-    return props.share.max_accessed > 0
+-      ? `${props.share.accessed} / ${props.share.max_accessed}`
+-      : `${props.share.accessed}`
+-  }
+-  const status = () => {
+-    if (props.share.disabled) {
+-      return "disabled"
+-    }
+-    if (
+-      (props.share.max_accessed > 0 &&
+-        props.share.accessed >= props.share.max_accessed) ||
+-      props.share.files.length === 0 ||
+-      (props.share.expires && new Date(props.share.expires) < new Date())
+-    ) {
+-      return "invalid"
+-    }
+-    if (props.share.creator === me().username && !props.canShare) {
+-      return "denied"
+-    }
+-    return "work"
+-  }
+-  const { copy } = useUtil()
+-  return (
+-    <Tr>
+-      <Td>{path()}</Td>
+-      <Td>{props.share.id}</Td>
+-      <Show when={UserMethods.is_admin(me())}>
+-        <Td>
+-          <Creator name={props.share.creator} role={props.share.creator_role} />
+-        </Td>
+-      </Show>
+-      <Td>
+-        {props.share.expires
+-          ? new Date(props.share.expires).toLocaleString()
+-          : ""}
+-      </Td>
+-      <Td>{accessed()}</Td>
+-      <Td>{t(`shares.status_list.${status()}`)}</Td>
+-      <Td>{props.share.remark}</Td>
+-      <Td>
+-        <HStack spacing="$2">
+-          <Button
+-            colorScheme="primary"
+-            onClick={() => {
+-              const templateData = makeTemplateData(props.share, {
+-                site_title: getSetting("site_title"),
+-              })
+-              const msg = matchTemplate(
+-                getSetting("share_summary_content"),
+-                templateData,
+-              )
+-              copy(msg)
+-            }}
+-          >
+-            {t("shares.copy_msg")}
+-          </Button>
+-          <ShareOp {...props} />
+-        </HStack>
+-      </Td>
+-    </Tr>
+-  )
+-}
+diff --git a/src/pages/manage/shares/Shares.tsx b/src/pages/manage/shares/Shares.tsx
+deleted file mode 100644
+index b3b2236..0000000
+--- a/src/pages/manage/shares/Shares.tsx
++++ /dev/null
+@@ -1,105 +0,0 @@
+-import {
+-  Box,
+-  Button,
+-  HStack,
+-  Table,
+-  Tbody,
+-  Th,
+-  Thead,
+-  Tooltip,
+-  Tr,
+-  VStack,
+-} from "@hope-ui/solid"
+-import { createSignal, For, Show } from "solid-js"
+-import { useFetch, useManageTitle, useRouter, useT } from "~/hooks"
+-import { PageResp, ShareInfo, UserMethods, UserPermissions } from "~/types"
+-import { handleResp, r } from "~/utils"
+-import { ShareListItem } from "./Share"
+-import { me } from "~/store"
+-
+-const Shares = () => {
+-  const t = useT()
+-  useManageTitle("manage.sidemenu.shares")
+-  const { to } = useRouter()
+-  const [getSharesLoading, getShares] = useFetch(
+-    (): Promise<PageResp<ShareInfo>> => r.get("/share/list"),
+-  )
+-  const [shares, setShares] = createSignal<ShareInfo[]>([])
+-  const refresh = async () => {
+-    const resp = await getShares()
+-    handleResp(resp, (data) => setShares(data.content))
+-  }
+-  const canShare = UserMethods.can(
+-    me(),
+-    UserPermissions.findIndex((item) => item === "share"),
+-  )
+-  refresh()
+-  return (
+-    <VStack spacing="$3" alignItems="start" w="$full">
+-      <HStack
+-        spacing="$2"
+-        gap="$2"
+-        w="$full"
+-        wrap={{
+-          "@initial": "wrap",
+-          "@md": "unset",
+-        }}
+-      >
+-        <Button
+-          colorScheme="accent"
+-          loading={getSharesLoading()}
+-          onClick={refresh}
+-        >
+-          {t("global.refresh")}
+-        </Button>
+-        <Show
+-          when={!canShare}
+-          fallback={
+-            <Button onClick={() => to("/@manage/shares/add")}>
+-              {t("global.add")}
+-            </Button>
+-          }
+-        >
+-          <Tooltip
+-            withArrow
+-            label={t("shares.no_permission_tip")}
+-            placement="right"
+-          >
+-            <Button disabled> {t("global.add")} </Button>
+-          </Tooltip>
+-        </Show>
+-      </HStack>
+-      <Box w="$full" overflowX="auto">
+-        <Table highlightOnHover dense>
+-          <Thead>
+-            <Tr>
+-              <For each={["files", "id"]}>
+-                {(title) => <Th>{t(`shares.${title}`)}</Th>}
+-              </For>
+-              <Show when={UserMethods.is_admin(me())}>
+-                <Th>{t(`shares.creator`)}</Th>
+-              </Show>
+-              <For each={["expires", "accessed", "status", "remark"]}>
+-                {(title) => <Th>{t(`shares.${title}`)}</Th>}
+-              </For>
+-              <Th>{t("global.operations")}</Th>
+-            </Tr>
+-          </Thead>
+-          <Tbody>
+-            <For each={shares()}>
+-              {(share) => (
+-                <ShareListItem
+-                  share={share}
+-                  refresh={refresh}
+-                  canShare={canShare}
+-                />
+-              )}
+-            </For>
+-          </Tbody>
+-        </Table>
+-      </Box>
+-    </VStack>
+-  )
+-}
+-
+-export default Shares
+diff --git a/src/pages/manage/sidemenu_items.tsx b/src/pages/manage/sidemenu_items.tsx
+index 6776e38..60ddbfb 100644
+--- a/src/pages/manage/sidemenu_items.tsx
++++ b/src/pages/manage/sidemenu_items.tsx
+@@ -8,7 +8,6 @@ import {
+   BsJoystick,
+   BsMedium,
+   BsFingerprint,
+-  BsFront,
+   BsCloudUploadFill,
+   BsSearch,
+   BsBucket,
+@@ -17,12 +16,11 @@ import {
+ } from "solid-icons/bs"
+ import { FiLogIn } from "solid-icons/fi"
+ import { SiMetabase } from "solid-icons/si"
+-import { CgDatabase, CgShare } from "solid-icons/cg"
++import { CgDatabase } from "solid-icons/cg"
+ import { OcWorkflow2 } from "solid-icons/oc"
+-import { IoCopy, IoMove, IoHome, IoMagnetOutline } from "solid-icons/io"
++import { IoCopy, IoMove, IoHome } from "solid-icons/io"
+ import { Component, lazy } from "solid-js"
+ import { Group, UserRole } from "~/types"
+-import { FaSolidBook, FaSolidDatabase } from "solid-icons/fa"
+ import { TbArchive } from "solid-icons/tb"
+ 
+ export type SideMenuItem = SideMenuItemProps & {
+@@ -113,13 +111,6 @@ export const side_menu_items: SideMenuItem[] = [
+     to: "/@manage/tasks",
+     role: UserRole.GENERAL,
+     children: [
+-      {
+-        title: "manage.sidemenu.offline_download",
+-        icon: IoMagnetOutline,
+-        to: "/@manage/tasks/offline_download",
+-        role: UserRole.GENERAL,
+-        component: lazy(() => import("./tasks/offline_download")),
+-      },
+       // {
+       //   title: "manage.sidemenu.aria2",
+       //   icon: BsCloudArrowDownFill,
+@@ -174,13 +165,6 @@ export const side_menu_items: SideMenuItem[] = [
+     to: "/@manage/storages",
+     component: lazy(() => import("./storages/Storages")),
+   },
+-  {
+-    title: "manage.sidemenu.shares",
+-    icon: CgShare,
+-    to: "/@manage/shares",
+-    role: UserRole.GENERAL,
+-    component: lazy(() => import("./shares/Shares")),
+-  },
+   {
+     title: "manage.sidemenu.metas",
+     icon: SiMetabase,
+@@ -193,26 +177,6 @@ export const side_menu_items: SideMenuItem[] = [
+     to: "/@manage/indexes",
+     component: lazy(() => import("./indexes/index_page")),
+   },
+-  {
+-    title: "manage.sidemenu.backup-restore",
+-    to: "/@manage/backup-restore",
+-    icon: FaSolidDatabase,
+-    component: lazy(() => import("./backup-restore")),
+-  },
+-  {
+-    title: "manage.sidemenu.about",
+-    icon: BsFront,
+-    to: "/@manage/about",
+-    role: UserRole.GUEST,
+-    component: lazy(() => import("./About")),
+-  },
+-  {
+-    title: "manage.sidemenu.docs",
+-    icon: FaSolidBook,
+-    to: "https://doc.oplist.org",
+-    role: UserRole.GUEST,
+-    external: true,
+-  },
+   {
+     title: "manage.sidemenu.home",
+     icon: IoHome,
+diff --git a/src/pages/manage/tasks/Aria2.tsx b/src/pages/manage/tasks/Aria2.tsx
+deleted file mode 100644
+index 5b1be40..0000000
+--- a/src/pages/manage/tasks/Aria2.tsx
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { VStack } from "@hope-ui/solid"
+-import { useManageTitle } from "~/hooks"
+-import { TypeTasks } from "./Tasks"
+-import {
+-  getOfflineDownloadNameAnalyzer,
+-  getOfflineDownloadTransferNameAnalyzer,
+-} from "./helper"
+-
+-// deprecated
+-const Aria2 = () => {
+-  useManageTitle("manage.sidemenu.aria2")
+-  return (
+-    <VStack w="$full" alignItems="start" spacing="$4">
+-      <TypeTasks
+-        type="aria2_down"
+-        canRetry
+-        nameAnalyzer={getOfflineDownloadNameAnalyzer()}
+-      />
+-      <TypeTasks
+-        type="aria2_transfer"
+-        nameAnalyzer={getOfflineDownloadTransferNameAnalyzer()}
+-      />
+-    </VStack>
+-  )
+-}
+-
+-export default Aria2
+diff --git a/src/pages/manage/tasks/Qbit.tsx b/src/pages/manage/tasks/Qbit.tsx
+deleted file mode 100644
+index d763da7..0000000
+--- a/src/pages/manage/tasks/Qbit.tsx
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { VStack } from "@hope-ui/solid"
+-import { useManageTitle } from "~/hooks"
+-import { TypeTasks } from "./Tasks"
+-import {
+-  getOfflineDownloadNameAnalyzer,
+-  getOfflineDownloadTransferNameAnalyzer,
+-} from "./helper"
+-
+-// deprecated
+-const Qbit = () => {
+-  useManageTitle("manage.sidemenu.qbit")
+-  return (
+-    <VStack w="$full" alignItems="start" spacing="$4">
+-      <TypeTasks
+-        type="qbit_down"
+-        canRetry
+-        nameAnalyzer={getOfflineDownloadNameAnalyzer()}
+-      />
+-      <TypeTasks
+-        type="qbit_transfer"
+-        nameAnalyzer={getOfflineDownloadTransferNameAnalyzer()}
+-      />
+-    </VStack>
+-  )
+-}
+-
+-export default Qbit
+diff --git a/src/pages/manage/tasks/helper.tsx b/src/pages/manage/tasks/helper.tsx
+index 69f654c..0afe4a9 100644
+--- a/src/pages/manage/tasks/helper.tsx
++++ b/src/pages/manage/tasks/helper.tsx
+@@ -26,64 +26,6 @@ export const getPath = (
+   )
+ }
+ 
+-export const getOfflineDownloadNameAnalyzer = (): TaskNameAnalyzer => {
+-  const t = useT()
+-  const [underline, setUnderline] = createSignal(false)
+-  return {
+-    regex: /^download (.+) to \((.+)\)$/,
+-    title: (matches) => matches[1],
+-    attrs: {
+-      [t(`tasks.attr.offline_download.url`)]: (matches) => (
+-        <a
+-          style={underline() ? "text-decoration: underline" : ""}
+-          onMouseOver={() => setUnderline(true)}
+-          onMouseOut={() => setUnderline(false)}
+-          href={matches[1]}
+-          target="_blank"
+-        >
+-          {matches[1]}
+-        </a>
+-      ),
+-      [t(`tasks.attr.offline_download.path`)]: (matches) =>
+-        getPath("", matches[2]),
+-    },
+-  }
+-}
+-
+-export const getOfflineDownloadTransferNameAnalyzer = (): TaskNameAnalyzer => {
+-  const t = useT()
+-  const [underline, setUnderline] = createSignal(false)
+-  return {
+-    regex: /^(transfer|upload) \[(.*)]\((.*\/([^\/]+))\) to \[(.+)]\((.+)\)$/,
+-    title: (matches) => (matches[1] === "upload" ? matches[2] : matches[4]),
+-    attrs: {
+-      [t(`tasks.attr.offline_download.transfer_src`)]: (matches) => {
+-        return matches[1] !== "transfer" || matches[2] === ""
+-          ? undefined
+-          : getPath(matches[2], matches[3])
+-      },
+-      [t(`tasks.attr.offline_download.transfer_src_local`)]: (matches) => {
+-        return matches[2] === "" ? matches[3] : undefined
+-      },
+-      [t(`tasks.attr.offline_download.url`)]: (matches) => {
+-        return matches[1] === "upload" ? (
+-          <a
+-            style={underline() ? "text-decoration: underline" : ""}
+-            onMouseOver={() => setUnderline(true)}
+-            onMouseOut={() => setUnderline(false)}
+-            href={matches[3]}
+-            target="_blank"
+-          >
+-            {matches[3]}
+-          </a>
+-        ) : undefined
+-      },
+-      [t(`tasks.attr.offline_download.transfer_dst`)]: (matches) =>
+-        getPath(matches[5], matches[6]),
+-    },
+-  }
+-}
+-
+ export const getDecompressNameAnalyzer = (): TaskNameAnalyzer => {
+   const t = useT()
+   return {
+diff --git a/src/pages/manage/tasks/offline_download.tsx b/src/pages/manage/tasks/offline_download.tsx
+deleted file mode 100644
+index f0d8120..0000000
+--- a/src/pages/manage/tasks/offline_download.tsx
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { VStack } from "@hope-ui/solid"
+-import { useManageTitle } from "~/hooks"
+-import { TypeTasks } from "./Tasks"
+-import {
+-  getOfflineDownloadNameAnalyzer,
+-  getOfflineDownloadTransferNameAnalyzer,
+-} from "./helper"
+-
+-const OfflineDownload = () => {
+-  useManageTitle("manage.sidemenu.offline_download")
+-  return (
+-    <VStack w="$full" alignItems="start" spacing="$4">
+-      <TypeTasks
+-        type="offline_download"
+-        canRetry
+-        nameAnalyzer={getOfflineDownloadNameAnalyzer()}
+-      />
+-      <TypeTasks
+-        type="offline_download_transfer"
+-        canRetry
+-        nameAnalyzer={getOfflineDownloadTransferNameAnalyzer()}
+-      />
+-    </VStack>
+-  )
+-}
+-
+-export default OfflineDownload
+diff --git a/src/pages/manage/users/AddOrEdit.tsx b/src/pages/manage/users/AddOrEdit.tsx
+index 7a31f70..0c553d7 100644
+--- a/src/pages/manage/users/AddOrEdit.tsx
++++ b/src/pages/manage/users/AddOrEdit.tsx
+@@ -11,7 +11,14 @@ import {
+ import { MaybeLoading, FolderChooseInput } from "~/components"
+ import { useFetch, useRouter, useT } from "~/hooks"
+ import { handleResp, notify, r } from "~/utils"
+-import { PEmptyResp, PResp, User, UserMethods, UserPermissions } from "~/types"
++import {
++  PEmptyResp,
++  PResp,
++  User,
++  UserMethods,
++  UserPermissionBits,
++  UserPermissions,
++} from "~/types"
+ import { createStore } from "solid-js/store"
+ import { For, Show } from "solid-js"
+ import { Me, me, setMe } from "~/store"
+@@ -118,15 +125,16 @@ const AddOrEdit = () => {
+           </FormLabel>
+           <Flex w="$full" wrap="wrap" gap="$2">
+             <For each={UserPermissions}>
+-              {(item, i) => (
++              {(item) => (
+                 <Permission
+                   name={item}
+-                  can={UserMethods.can(user, i())}
++                  can={UserMethods.can(user, UserPermissionBits[item])}
+                   onChange={(val) => {
++                    const bit = UserPermissionBits[item]
+                     if (val) {
+-                      setUser("permission", (user.permission |= 1 << i()))
++                      setUser("permission", (user.permission |= 1 << bit))
+                     } else {
+-                      setUser("permission", (user.permission &= ~(1 << i())))
++                      setUser("permission", (user.permission &= ~(1 << bit)))
+                     }
+                   }}
+                 />
+diff --git a/src/pages/manage/users/Profile.tsx b/src/pages/manage/users/Profile.tsx
+index 54b3dfa..844910e 100644
+--- a/src/pages/manage/users/Profile.tsx
++++ b/src/pages/manage/users/Profile.tsx
+@@ -19,7 +19,13 @@ import { createSignal, For, JSXElement, onCleanup, Show } from "solid-js"
+ import { LinkWithBase, MaybeLoading } from "~/components"
+ import { useFetch, useManageTitle, useRouter, useT } from "~/hooks"
+ import { setMe, me, getSettingBool } from "~/store"
+-import { PEmptyResp, UserMethods, UserPermissions, PResp } from "~/types"
++import {
++  PEmptyResp,
++  UserMethods,
++  UserPermissionBits,
++  UserPermissions,
++  PResp,
++} from "~/types"
+ import { handleResp, handleRespWithoutNotify, notify, r } from "~/utils"
+ import { WebauthnItem } from "./Webauthnitems"
+ import { PublicKeys } from "./PublicKeys"
+@@ -301,8 +307,10 @@ const Profile = () => {
+       </Show>
+       <HStack wrap="wrap" gap="$2" mt="$2">
+         <For each={UserPermissions}>
+-          {(item, i) => (
+-            <PermissionBadge can={UserMethods.can(me(), i())}>
++          {(item) => (
++            <PermissionBadge
++              can={UserMethods.can(me(), UserPermissionBits[item])}
++            >
+               {t(`users.permissions.${item}`)}
+             </PermissionBadge>
+           )}
+@@ -311,7 +319,7 @@ const Profile = () => {
+       <Show
+         when={UserMethods.can(
+           me(),
+-          UserPermissions.findIndex((p) => p === "ftp_read"),
++          UserPermissionBits.ftp_read,
+         )}
+       >
+         <PublicKeys isMine={true} userId={me().id} />
+diff --git a/src/pages/manage/users/Users.tsx b/src/pages/manage/users/Users.tsx
+index 709b0d7..09a51b5 100644
+--- a/src/pages/manage/users/Users.tsx
++++ b/src/pages/manage/users/Users.tsx
+@@ -23,6 +23,7 @@ import {
+ import { handleResp, notify, r } from "~/utils"
+ import {
+   UserPermissions,
++  UserPermissionBits,
+   User,
+   UserMethods,
+   PPageResp,
+@@ -50,12 +51,14 @@ const Permissions = (props: { user: User }) => {
+   return (
+     <HStack spacing="$0_5">
+       <For each={UserPermissions}>
+-        {(item, i) => (
++        {(item) => (
+           <Tooltip label={t(`users.permissions.${item}`)}>
+             <Box
+               boxSize="$2"
+               rounded="$full"
+-              bg={color(UserMethods.can(props.user, i()))}
++              bg={color(
++                UserMethods.can(props.user, UserPermissionBits[item]),
++              )}
+             ></Box>
+           </Tooltip>
+         )}
+diff --git a/src/store/user.ts b/src/store/user.ts
+index d2f2757..aa60299 100644
+--- a/src/store/user.ts
++++ b/src/store/user.ts
+@@ -1,5 +1,10 @@
+ import { createSignal } from "solid-js"
+-import { User, UserMethods, UserPermissions } from "~/types"
++import {
++  User,
++  UserMethods,
++  UserPermissionBits,
++  UserPermissions,
++} from "~/types"
+ 
+ export type Me = User & { otp: boolean }
+ const [me, setMe] = createSignal<Me>({} as Me)
+@@ -7,7 +12,7 @@ const [me, setMe] = createSignal<Me>({} as Me)
+ type Permission = (typeof UserPermissions)[number]
+ export const userCan = (p: Permission) => {
+   const u = me()
+-  return UserMethods.can(u, UserPermissions.indexOf(p))
++  return UserMethods.can(u, UserPermissionBits[p])
+ }
+ 
+ export { me, setMe }
+diff --git a/src/types/index.ts b/src/types/index.ts
+index ee6a1a4..b936764 100644
+--- a/src/types/index.ts
++++ b/src/types/index.ts
+@@ -7,5 +7,4 @@ export * from "./driver_item"
+ export * from "./item_type"
+ export * from "./meta"
+ export * from "./task"
+-export * from "./share"
+ export * from "./torrent"
+diff --git a/src/types/share.ts b/src/types/share.ts
+deleted file mode 100644
+index 3f81e04..0000000
+--- a/src/types/share.ts
++++ /dev/null
+@@ -1,27 +0,0 @@
+-import { ExtractFolder, OrderBy, OrderDirection } from "~/types/storage"
+-
+-export interface Share {
+-  id?: string
+-  expires: string | null
+-  pwd: string
+-  max_accessed: number
+-  disabled: boolean
+-  order_by: OrderBy
+-  order_direction: OrderDirection
+-  extract_folder: ExtractFolder
+-  files: string[]
+-  remark: string
+-  readme: string
+-  header: string
+-}
+-
+-export interface ShareUpdate extends Share {
+-  id: string
+-  new_id: string
+-  accessed: number
+-}
+-
+-export interface ShareInfo extends ShareUpdate {
+-  creator: string
+-  creator_role: number
+-}
+diff --git a/src/types/user.ts b/src/types/user.ts
+index 99a4176..032af3e 100644
+--- a/src/types/user.ts
++++ b/src/types/user.ts
+@@ -17,24 +17,25 @@ export interface User {
+   // otp: boolean;
+ }
+ 
+-export const UserPermissions = [
+-  "see_hides",
+-  "access_without_password",
+-  "offline_download",
+-  "write_content",
+-  "rename",
+-  "move",
+-  "copy",
+-  "delete",
+-  "webdav_read",
+-  "webdav_manage",
+-  "ftp_read",
+-  "ftp_manage",
+-  "read_archives",
+-  "decompress",
+-  "share",
+-  "customize_share_id",
+-] as const
++export const UserPermissionBits = {
++  see_hides: 0,
++  access_without_password: 1,
++  write_content: 3,
++  rename: 4,
++  move: 5,
++  copy: 6,
++  delete: 7,
++  webdav_read: 8,
++  webdav_manage: 9,
++  ftp_read: 10,
++  ftp_manage: 11,
++  read_archives: 12,
++  decompress: 13,
++} as const
++
++export const UserPermissions = Object.keys(UserPermissionBits) as Array<
++  keyof typeof UserPermissionBits
++>
+ 
+ export const UserMethods = {
+   is_guest: (user: User) => user.role === UserRole.GUEST,
+diff --git a/src/utils/api.ts b/src/utils/api.ts
+index 39f6463..3d83485 100644
+--- a/src/utils/api.ts
++++ b/src/utils/api.ts
+@@ -9,9 +9,6 @@ import {
+   RenameObj,
+   ArchiveMeta,
+   PPageResp,
+-  TorrentInfo,
+-  TorrentUploadParseResult,
+-  TorrentRapidUploadResult,
+ } from "~/types"
+ import { r } from "."
+ 
+@@ -215,15 +212,6 @@ export const fsArchiveDecompress = (
+   })
+ }
+ 
+-export const offlineDownload = (
+-  path: string,
+-  urls: string[],
+-  tool: string,
+-  delete_policy: string,
+-): PEmptyResp => {
+-  return r.post(`/fs/add_offline_download`, { path, urls, tool, delete_policy })
+-}
+-
+ export const fetchText = async (
+   url: string,
+   ts = true,
+@@ -286,24 +274,3 @@ export const updateIndex = async (paths = [], max_depth = -1): PEmptyResp => {
+     max_depth,
+   })
+ }
+-
+-// ========== Torrent 相关 API ==========
+-
+-export const torrentParse = (torrent_data: string): PResp<TorrentInfo> => {
+-  return r.post("/fs/torrent/parse", { torrent_data })
+-}
+-
+-export const torrentUploadParse = (
+-  file: File,
+-): PResp<TorrentUploadParseResult> => {
+-  const formData = new FormData()
+-  formData.append("torrent", file)
+-  return r.post("/fs/torrent/upload_parse", formData)
+-}
+-
+-export const torrentRapidUpload = (
+-  torrent_data: string,
+-  path: string,
+-): PResp<TorrentRapidUploadResult> => {
+-  return r.post("/fs/torrent/rapid_upload", { torrent_data, path })
+-}
+diff --git a/src/utils/bus.ts b/src/utils/bus.ts
+index ac815de..d8f2a99 100644
+--- a/src/utils/bus.ts
++++ b/src/utils/bus.ts
+@@ -1,5 +1,4 @@
+ import mitt from "mitt"
+-import { TorrentInfo } from "~/types"
+ 
+ type Events = {
+   to: string
+@@ -7,7 +6,6 @@ type Events = {
+   tool: string
+   pathname: string
+   extract: string
+-  torrent_parsed: { torrentData: string; info: TorrentInfo }
+ }
+ 
+ export const bus = mitt<Events>()
+diff --git a/src/utils/index.ts b/src/utils/index.ts
+index ca8dcbf..c4ae82b 100644
+--- a/src/utils/index.ts
++++ b/src/utils/index.ts
+@@ -11,6 +11,5 @@ export * from "./const"
+ export * from "./api"
+ export * from "./hash"
+ export * from "./compatibility"
+-export * from "./share"
+ export * from "./storage"
+ export * from "./load_external"
+diff --git a/src/utils/share.ts b/src/utils/share.ts
+deleted file mode 100644
+index cb6abe4..0000000
+--- a/src/utils/share.ts
++++ /dev/null
+@@ -1,47 +0,0 @@
+-import { ShareInfo } from "~/types"
+-import { base_path } from "."
+-
+-const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789"
+-
+-export const randomPwd = () => {
+-  const arr: string[] = Array.from(
+-    { length: 5 },
+-    () => letters[Math.floor(Math.random() * letters.length)],
+-  )
+-  return arr.join("")
+-}
+-
+-export const makeTemplateData = (
+-  share: ShareInfo,
+-  other?: { [k: string]: any },
+-) => {
+-  return {
+-    base_url: location.origin + base_path,
+-    ...share,
+-    ...other,
+-  }
+-}
+-
+-const expireDateIncrementRegExp =
+-  /^\+(?=\d+[wdHms])(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)H)?(?:(\d+)m)?(?:(\d+)s)?(?:(\d+)ms)?$/
+-
+-const toInt = (s: string | undefined) => {
+-  if (s === undefined) return 0
+-  const n = Number.parseInt(s)
+-  return Number.isNaN(n) ? 0 : n
+-}
+-
+-export const getExpireDate = (dateStr: string) => {
+-  const match = expireDateIncrementRegExp.exec(dateStr)
+-  if (match) {
+-    const w = toInt(match[1])
+-    const d = toInt(match[2]) + w * 7
+-    const H = toInt(match[3]) + d * 24
+-    const m = toInt(match[4]) + H * 60
+-    const s = toInt(match[5]) + m * 60
+-    const ms = toInt(match[6]) + s * 1000
+-    return new Date(Date.now() + ms)
+-  } else {
+-    return new Date(dateStr)
+-  }
+-}

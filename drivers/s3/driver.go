@@ -13,7 +13,6 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
-	"github.com/OpenListTeam/OpenList/v4/pkg/cron"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/aws/aws-sdk-go/aws"
@@ -34,7 +33,6 @@ type S3 struct {
 	directUploadClient *s3.S3
 
 	config driver.Config
-	cron   *cron.Cron
 }
 
 func (d *S3) Config() driver.Config {
@@ -49,19 +47,6 @@ func (d *S3) Init(ctx context.Context) error {
 	if d.Region == "" {
 		d.Region = "openlist"
 	}
-	if d.config.Name == "Doge" {
-		// 多吉云每次临时生成的秘钥有效期为 2h，所以这里设置为 118 分钟重新生成一次
-		d.cron = cron.NewCron(time.Minute * 118)
-		d.cron.Do(func() {
-			err := d.initSession()
-			if err != nil {
-				log.Errorln("Doge init session error:", err)
-			}
-			d.client = d.getClient(ClientTypeNormal)
-			d.linkClient = d.getClient(ClientTypeLink)
-			d.directUploadClient = d.getClient(ClientTypeDirectUpload)
-		})
-	}
 	err := d.initSession()
 	if err != nil {
 		return err
@@ -73,9 +58,6 @@ func (d *S3) Init(ctx context.Context) error {
 }
 
 func (d *S3) Drop(ctx context.Context) error {
-	if d.cron != nil {
-		d.cron.Stop()
-	}
 	return nil
 }
 

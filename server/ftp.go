@@ -122,24 +122,21 @@ func (d *FtpMainDriver) AuthUser(cc ftpserver.ClientContext, user, pass string) 
 	var userObj *model.User
 	var err error
 	if user == "anonymous" || user == "guest" {
-		userObj, err = op.GetGuest()
-		if err != nil {
-			return nil, err
+		model.LoginCache.Set(ip, count+1)
+		return nil, errors.New("anonymous FTP access is disabled")
+	}
+	userObj, err = op.GetUserByName(user)
+	if err == nil {
+		err = userObj.ValidateRawPassword(pass)
+		if err != nil && setting.GetBool(conf.LdapLoginEnabled) && userObj.AllowLdap {
+			err = common.HandleLdapLogin(user, pass)
 		}
-	} else {
-		userObj, err = op.GetUserByName(user)
-		if err == nil {
-			err = userObj.ValidateRawPassword(pass)
-			if err != nil && setting.GetBool(conf.LdapLoginEnabled) && userObj.AllowLdap {
-				err = common.HandleLdapLogin(user, pass)
-			}
-		} else if setting.GetBool(conf.LdapLoginEnabled) && model.CanFTPAccess(int32(setting.GetInt(conf.LdapDefaultPermission, 0))) {
-			userObj, err = tryLdapLoginAndRegister(user, pass)
-		}
-		if err != nil {
-			model.LoginCache.Set(ip, count+1)
-			return nil, err
-		}
+	} else if setting.GetBool(conf.LdapLoginEnabled) && model.CanFTPAccess(int32(setting.GetInt(conf.LdapDefaultPermission, 0))) {
+		userObj, err = tryLdapLoginAndRegister(user, pass)
+	}
+	if err != nil {
+		model.LoginCache.Set(ip, count+1)
+		return nil, err
 	}
 	if userObj.Disabled || !userObj.CanFTPAccess() {
 		model.LoginCache.Set(ip, count+1)
@@ -149,11 +146,7 @@ func (d *FtpMainDriver) AuthUser(cc ftpserver.ClientContext, user, pass string) 
 
 	ctx := context.Background()
 	ctx = context.WithValue(ctx, conf.UserKey, userObj)
-	if user == "anonymous" || user == "guest" {
-		ctx = context.WithValue(ctx, conf.MetaPassKey, pass)
-	} else {
-		ctx = context.WithValue(ctx, conf.MetaPassKey, "")
-	}
+	ctx = context.WithValue(ctx, conf.MetaPassKey, "")
 	ctx = context.WithValue(ctx, conf.ClientIPKey, ip)
 	ctx = context.WithValue(ctx, conf.ProxyHeaderKey, d.proxyHeader)
 	return ftp.NewAferoAdapter(ctx), nil

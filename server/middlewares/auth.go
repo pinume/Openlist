@@ -13,11 +13,16 @@ import (
 )
 
 // Auth is a middleware that checks if the user is logged in.
-// if token is empty, set user to guest
-func Auth(allowDisabledGuest bool) func(c *gin.Context) {
+// The boolean parameter is kept for source compatibility and no longer enables guest access.
+func Auth(_ bool) func(c *gin.Context) {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
-		if subtle.ConstantTimeCompare([]byte(token), []byte(setting.GetStr(conf.Token))) == 1 {
+		if token == "" {
+			common.ErrorStrResp(c, "Authentication required", 401)
+			return
+		}
+		adminToken := setting.GetStr(conf.Token)
+		if adminToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) == 1 {
 			admin, err := op.GetAdmin()
 			if err != nil {
 				common.ErrorResp(c, err, 500)
@@ -26,23 +31,6 @@ func Auth(allowDisabledGuest bool) func(c *gin.Context) {
 			}
 			common.GinAppendValues(c, conf.UserKey, admin)
 			log.Debugf("use admin token: %+v", admin)
-			c.Next()
-			return
-		}
-		if token == "" {
-			guest, err := op.GetGuest()
-			if err != nil {
-				common.ErrorResp(c, err, 500)
-				c.Abort()
-				return
-			}
-			if !allowDisabledGuest && guest.Disabled {
-				common.ErrorStrResp(c, "Guest user is disabled, login please", 401)
-				c.Abort()
-				return
-			}
-			common.GinAppendValues(c, conf.UserKey, guest)
-			log.Debugf("use empty token: %+v", guest)
 			c.Next()
 			return
 		}
@@ -77,7 +65,12 @@ func Auth(allowDisabledGuest bool) func(c *gin.Context) {
 
 func Authn(c *gin.Context) {
 	token := c.GetHeader("Authorization")
-	if subtle.ConstantTimeCompare([]byte(token), []byte(setting.GetStr(conf.Token))) == 1 {
+	if token == "" {
+		common.ErrorStrResp(c, "Authentication required", 401)
+		return
+	}
+	adminToken := setting.GetStr(conf.Token)
+	if adminToken != "" && subtle.ConstantTimeCompare([]byte(token), []byte(adminToken)) == 1 {
 		admin, err := op.GetAdmin()
 		if err != nil {
 			common.ErrorResp(c, err, 500)
@@ -86,18 +79,6 @@ func Authn(c *gin.Context) {
 		}
 		common.GinAppendValues(c, conf.UserKey, admin)
 		log.Debugf("use admin token: %+v", admin)
-		c.Next()
-		return
-	}
-	if token == "" {
-		guest, err := op.GetGuest()
-		if err != nil {
-			common.ErrorResp(c, err, 500)
-			c.Abort()
-			return
-		}
-		common.GinAppendValues(c, conf.UserKey, guest)
-		log.Debugf("use empty token: %+v", guest)
 		c.Next()
 		return
 	}

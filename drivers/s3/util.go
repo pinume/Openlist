@@ -32,13 +32,6 @@ const (
 func (d *S3) initSession() error {
 	var err error
 	accessKeyID, secretAccessKey, sessionToken := d.AccessKeyID, d.SecretAccessKey, d.SessionToken
-	if d.config.Name == "Doge" {
-		credentialsTmp, err := getCredentials(d.AccessKeyID, d.SecretAccessKey)
-		if err != nil {
-			return err
-		}
-		accessKeyID, secretAccessKey, sessionToken = credentialsTmp.AccessKeyId, credentialsTmp.SecretAccessKey, credentialsTmp.SessionToken
-	}
 	cfg := &aws.Config{
 		Credentials:      credentials.NewStaticCredentials(accessKeyID, secretAccessKey, sessionToken),
 		Region:           &d.Region,

@@ -50,7 +50,7 @@ type User struct {
 	// Determine permissions by bit
 	//   0:  can see hidden files
 	//   1:  can access without password
-	//   2:  can add offline download tasks
+	//   2:  reserved
 	//   3:  can mkdir and upload
 	//   4:  can rename
 	//   5:  can move
@@ -62,8 +62,6 @@ type User struct {
 	//   11: ftp/sftp write
 	//   12: can read archives
 	//   13: can decompress archives
-	//   14: can share
-	//   15: can customize share id
 	Permission int32  `json:"permission"`
 	OtpSecret  string `json:"-"`
 	SsoID      string `json:"sso_id"` // unique by sso platform
@@ -114,14 +112,6 @@ func CanAccessWithoutPassword(permission int32) bool {
 
 func (u *User) CanAccessWithoutPassword() bool {
 	return CanAccessWithoutPassword(u.Permission)
-}
-
-func CanAddOfflineDownloadTasks(permission int32) bool {
-	return (permission>>2)&1 == 1
-}
-
-func (u *User) CanAddOfflineDownloadTasks() bool {
-	return CanAddOfflineDownloadTasks(u.Permission)
 }
 
 func CanWriteContent(permission int32) bool {
@@ -210,22 +200,6 @@ func CanDecompress(permission int32) bool {
 
 func (u *User) CanDecompress() bool {
 	return CanDecompress(u.Permission)
-}
-
-func CanShare(permission int32) bool {
-	return (permission>>14)&1 == 1
-}
-
-func (u *User) CanShare() bool {
-	return CanShare(u.Permission)
-}
-
-func CanCustomizeShareID(permission int32) bool {
-	return (permission>>15)&1 == 1
-}
-
-func (u *User) CanCustomizeShareID() bool {
-	return CanCustomizeShareID(u.Permission)
 }
 
 func (u *User) JoinPath(reqPath string) (string, error) {

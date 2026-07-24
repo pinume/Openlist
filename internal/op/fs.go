@@ -712,62 +712,6 @@ func Put(ctx context.Context, storage driver.Driver, dstDirPath string, file mod
 	return errors.WithStack(err)
 }
 
-func PutURL(ctx context.Context, storage driver.Driver, dstDirPath, dstName, url string) error {
-	if storage.Config().CheckStatus && storage.GetStorage().Status != WORK {
-		return errors.WithMessagef(errs.StorageNotInit, "storage status: %s", storage.GetStorage().Status)
-	}
-	dstDirPath = utils.FixAndCleanPath(dstDirPath)
-	dstPath := stdpath.Join(dstDirPath, dstName)
-
-	if _, err := Get(ctx, storage, dstPath); err == nil {
-		return errors.WithStack(errs.ObjectAlreadyExists)
-	}
-	err := MakeDir(ctx, storage, dstDirPath)
-	if err != nil {
-		return errors.WithMessagef(err, "failed to make dir [%s]", dstDirPath)
-	}
-	dstDir, err := GetUnwrap(ctx, storage, dstDirPath)
-	if err != nil {
-		return errors.WithMessagef(err, "failed to get dir [%s]", dstDirPath)
-	}
-	if model.ObjHasMask(dstDir, model.NoWrite) {
-		return errors.WithStack(errs.PermissionDenied)
-	}
-	var newObj model.Obj
-	switch s := storage.(type) {
-	case driver.PutURLResult:
-		newObj, err = s.PutURL(ctx, dstDir, dstName, url)
-	case driver.PutURL:
-		err = s.PutURL(ctx, dstDir, dstName, url)
-	default:
-		return errors.WithStack(errs.NotImplement)
-	}
-	if err == nil {
-		Cache.linkCache.DeleteKey(Key(storage, dstPath))
-		if !storage.Config().NoCache {
-			if cache, exist := Cache.dirCache.Get(Key(storage, dstDirPath)); exist {
-				if newObj == nil {
-					t := time.Now()
-					newObj = &model.Object{
-						Name:     dstName,
-						Modified: t,
-						Ctime:    t,
-						Mask:     model.Temp,
-					}
-				}
-				newObj = wrapObjName(storage, newObj)
-				cache.UpdateObject(newObj.GetName(), newObj)
-			}
-
-			if ctx.Value(conf.SkipHookKey) == nil && needHandleObjsUpdateHook() {
-				go objsUpdateHook(context.WithoutCancel(ctx), storage, dstDirPath, false)
-			}
-		}
-	}
-	log.Debugf("put url [%s](%s) done", dstName, url)
-	return errors.WithStack(err)
-}
-
 func GetDirectUploadTools(storage driver.Driver) []string {
 	du, ok := storage.(driver.DirectUploader)
 	if !ok {

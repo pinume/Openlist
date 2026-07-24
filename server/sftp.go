@@ -43,12 +43,11 @@ func (d *SftpDriver) GetConfig() *sftpd.Config {
 		pwdAuth = d.PasswordAuth
 	}
 	serverConfig := ssh.ServerConfig{
-		NoClientAuth:         true,
-		NoClientAuthCallback: d.NoClientAuth,
-		PasswordCallback:     pwdAuth,
-		PublicKeyCallback:    d.PublicKeyAuth,
-		AuthLogCallback:      d.AuthLogCallback,
-		BannerCallback:       d.GetBanner,
+		NoClientAuth:      false,
+		PasswordCallback:  pwdAuth,
+		PublicKeyCallback: d.PublicKeyAuth,
+		AuthLogCallback:   d.AuthLogCallback,
+		BannerCallback:    d.GetBanner,
 	}
 	for _, k := range sftp.SSHSigners {
 		serverConfig.AddHostKey(k)
@@ -76,20 +75,6 @@ func (d *SftpDriver) GetFileSystem(sc *ssh.ServerConn) (sftpd.FileSystem, error)
 }
 
 func (d *SftpDriver) Close() {
-}
-
-func (d *SftpDriver) NoClientAuth(conn ssh.ConnMetadata) (*ssh.Permissions, error) {
-	if conn.User() != "guest" {
-		return nil, errors.New("only guest is allowed to login without authorization")
-	}
-	guest, err := op.GetGuest()
-	if err != nil {
-		return nil, err
-	}
-	if guest.Disabled || !guest.CanFTPAccess() {
-		return nil, errors.New("user is not allowed to access via SFTP")
-	}
-	return nil, nil
 }
 
 func (d *SftpDriver) PasswordAuth(conn ssh.ConnMetadata, password []byte) (*ssh.Permissions, error) {

@@ -22,10 +22,6 @@ var (
 	UnknownArchiveFormat      = errors.New("unknown archive format")
 	WrongArchivePassword      = errors.New("wrong archive password")
 	DriverExtractNotSupported = errors.New("driver extraction not supported")
-
-	WrongShareCode  = errors.New("wrong share code")
-	InvalidSharing  = errors.New("invalid sharing")
-	SharingNotFound = errors.New("sharing not found")
 )
 
 // NewErr wrap constant error with an extra message

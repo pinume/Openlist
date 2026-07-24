@@ -50,14 +50,8 @@ func ServeWebDAV(c *gin.Context) {
 func WebDAVAuth(c *gin.Context) {
 	// check count of login
 	ip := c.ClientIP()
-	guest, _ := op.GetGuest()
 	count, cok := model.LoginCache.Get(ip)
 	if cok && count >= model.DefaultMaxAuthRetries {
-		if c.Request.Method == "OPTIONS" {
-			common.GinAppendValues(c, conf.UserKey, guest)
-			c.Next()
-			return
-		}
 		c.Status(http.StatusTooManyRequests)
 		c.Abort()
 		model.LoginCache.Expire(ip, model.DefaultLockDuration)
@@ -83,11 +77,6 @@ func WebDAVAuth(c *gin.Context) {
 				return
 			}
 		}
-		if c.Request.Method == "OPTIONS" {
-			common.GinAppendValues(c, conf.UserKey, guest)
-			c.Next()
-			return
-		}
 		c.Writer.Header()["WWW-Authenticate"] = []string{`Basic realm="openlist"`}
 		c.Status(http.StatusUnauthorized)
 		c.Abort()
@@ -95,11 +84,6 @@ func WebDAVAuth(c *gin.Context) {
 	}
 	user, ok := tryLogin(username, password)
 	if !ok {
-		if c.Request.Method == "OPTIONS" {
-			common.GinAppendValues(c, conf.UserKey, guest)
-			c.Next()
-			return
-		}
 		model.LoginCache.Set(ip, count+1)
 		c.Status(http.StatusUnauthorized)
 		c.Abort()
@@ -108,11 +92,6 @@ func WebDAVAuth(c *gin.Context) {
 	// at least auth is successful till here
 	model.LoginCache.Del(ip)
 	if user.Disabled || !user.CanWebdavRead() {
-		if c.Request.Method == "OPTIONS" {
-			common.GinAppendValues(c, conf.UserKey, guest)
-			c.Next()
-			return
-		}
 		c.Status(http.StatusForbidden)
 		c.Abort()
 		return
@@ -143,11 +122,7 @@ func WebDAVAuth(c *gin.Context) {
 		return
 	}
 	common.GinAppendValues(c, conf.UserKey, user)
-	if user.IsGuest() {
-		common.GinAppendValues(c, conf.MetaPassKey, password)
-	} else {
-		common.GinAppendValues(c, conf.MetaPassKey, "")
-	}
+	common.GinAppendValues(c, conf.MetaPassKey, "")
 	c.Next()
 }
 

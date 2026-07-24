@@ -56,6 +56,11 @@ func loginHash(c *gin.Context, req *LoginReq) {
 		model.LoginCache.Set(ip, count+1)
 		return
 	}
+	if user.Disabled || user.IsGuest() {
+		common.ErrorStrResp(c, model.InvalidUsernameOrPassword, 401)
+		model.LoginCache.Set(ip, count+1)
+		return
+	}
 	// validate password hash
 	if err := user.ValidatePwdStaticHash(req.Password); err != nil {
 		common.ErrorStrResp(c, model.InvalidUsernameOrPassword, 401)

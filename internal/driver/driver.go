@@ -103,13 +103,6 @@ type Put interface {
 	Put(ctx context.Context, dstDir model.Obj, file model.FileStreamer, up UpdateProgress) error
 }
 
-type PutURL interface {
-	// PutURL directly put a URL into the storage
-	// Applicable to index-based drivers like URL-Tree or drivers that support uploading files as URLs
-	// Called when using SimpleHttp for offline downloading, skipping creating a download task
-	PutURL(ctx context.Context, dstDir model.Obj, name, url string) error
-}
-
 type MkdirResult interface {
 	MakeDir(ctx context.Context, parentDir model.Obj, dirName string) (model.Obj, error)
 }
@@ -151,13 +144,6 @@ type PutResult interface {
 	// limit the maximum number of upload threads, preventing excessive memory usage caused by buffering
 	// too many file chunks awaiting upload.
 	Put(ctx context.Context, dstDir model.Obj, file model.FileStreamer, up UpdateProgress) (model.Obj, error)
-}
-
-type PutURLResult interface {
-	// PutURL directly put a URL into the storage
-	// Applicable to index-based drivers like URL-Tree or drivers that support uploading files as URLs
-	// Called when using SimpleHttp for offline downloading, skipping creating a download task
-	PutURL(ctx context.Context, dstDir model.Obj, name, url string) (model.Obj, error)
 }
 
 type ArchiveReader interface {

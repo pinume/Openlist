@@ -19,6 +19,7 @@ type Addition struct {
 var config = driver.Config{
 	Name:              "Dropbox",
 	NoOverwriteUpload: true,
+	OnlyProxy:         true,
 }
 
 func init() {

@@ -64,11 +64,6 @@ func FsListSplit(c *gin.Context) {
 		return
 	}
 	req.Validate()
-	if strings.HasPrefix(req.Path, "/@s") {
-		req.Path = strings.TrimPrefix(req.Path, "/@s")
-		SharingList(c, &req)
-		return
-	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
 	if user.IsGuest() && user.Disabled {
 		common.ErrorStrResp(c, "Guest user is disabled, login please", 401)
@@ -265,11 +260,6 @@ func FsGetSplit(c *gin.Context) {
 	var req FsGetReq
 	if err := c.ShouldBind(&req); err != nil {
 		common.ErrorResp(c, err, 400)
-		return
-	}
-	if strings.HasPrefix(req.Path, "/@s") {
-		req.Path = strings.TrimPrefix(req.Path, "/@s")
-		SharingGet(c, &req)
 		return
 	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)

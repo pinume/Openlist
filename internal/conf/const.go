@@ -24,21 +24,19 @@ const (
 	HideStorageDetailsInManagePage = "hide_storage_details_in_manage_page"
 
 	// preview
-	TextTypes                     = "text_types"
-	AudioTypes                    = "audio_types"
-	VideoTypes                    = "video_types"
-	ImageTypes                    = "image_types"
-	ProxyTypes                    = "proxy_types"
-	ProxyIgnoreHeaders            = "proxy_ignore_headers"
-	AudioAutoplay                 = "audio_autoplay"
-	VideoAutoplay                 = "video_autoplay"
-	PreviewDownloadByDefault      = "preview_download_by_default"
-	PreviewArchivesByDefault      = "preview_archives_by_default"
-	SharePreviewDownloadByDefault = "share_preview_download_by_default"
-	SharePreviewArchivesByDefault = "share_preview_archives_by_default"
-	ReadMeAutoRender              = "readme_autorender"
-	FilterReadMeScripts           = "filter_readme_scripts"
-	NonEFSZipEncoding             = "non_efs_zip_encoding"
+	TextTypes                = "text_types"
+	AudioTypes               = "audio_types"
+	VideoTypes               = "video_types"
+	ImageTypes               = "image_types"
+	ProxyTypes               = "proxy_types"
+	ProxyIgnoreHeaders       = "proxy_ignore_headers"
+	AudioAutoplay            = "audio_autoplay"
+	VideoAutoplay            = "video_autoplay"
+	PreviewDownloadByDefault = "preview_download_by_default"
+	PreviewArchivesByDefault = "preview_archives_by_default"
+	ReadMeAutoRender         = "readme_autorender"
+	FilterReadMeScripts      = "filter_readme_scripts"
+	NonEFSZipEncoding        = "non_efs_zip_encoding"
 
 	// global
 	HideFiles               = "hide_files"
@@ -52,10 +50,6 @@ const (
 	ForwardDirectLinkParams = "forward_direct_link_params"
 	IgnoreDirectLinkParams  = "ignore_direct_link_params"
 	WebauthnLoginEnabled    = "webauthn_login_enabled"
-	SharePreview            = "share_preview"
-	ShareArchivePreview     = "share_archive_preview"
-	ShareForceProxy         = "share_force_proxy"
-	ShareSummaryContent     = "share_summary_content"
 	HandleHookAfterWriting  = "handle_hook_after_writing"
 	HandleHookRateLimit     = "handle_hook_rate_limit"
 	IgnoreSystemFiles       = "ignore_system_files"
@@ -65,35 +59,6 @@ const (
 	AutoUpdateIndex = "auto_update_index"
 	IgnorePaths     = "ignore_paths"
 	MaxIndexDepth   = "max_index_depth"
-
-	// aria2
-	Aria2Uri    = "aria2_uri"
-	Aria2Secret = "aria2_secret"
-
-	// transmission
-	TransmissionUri      = "transmission_uri"
-	TransmissionSeedtime = "transmission_seedtime"
-
-	// 115
-	Pan115TempDir = "115_temp_dir"
-
-	// 123
-	Pan123TempDir = "123_temp_dir"
-
-	// 115_open
-	Pan115OpenTempDir = "115_open_temp_dir"
-
-	// pikpak
-	PikPakTempDir = "pikpak_temp_dir"
-
-	// thunder
-	ThunderTempDir = "thunder_temp_dir"
-
-	// thunderx
-	ThunderXTempDir = "thunderx_temp_dir"
-
-	// thunder_browser
-	ThunderBrowserTempDir = "thunder_browser_temp_dir"
 
 	// single
 	Token         = "token"
@@ -132,14 +97,6 @@ const (
 	S3AccessKeyId     = "s3_access_key_id"
 	S3SecretAccessKey = "s3_secret_access_key"
 
-	// qbittorrent
-	QbittorrentUrl      = "qbittorrent_url"
-	QbittorrentSeedtime = "qbittorrent_seedtime"
-
-	// 123 open offline download
-	Pan123OpenOfflineDownloadCallbackUrl = "123_open_callback_url"
-	Pan123OpenTempDir                    = "123_open_temp_dir"
-
 	// ftp
 	FTPPublicHost            = "ftp_public_host"
 	FTPPasvPortMap           = "ftp_pasv_port_map"
@@ -150,17 +107,15 @@ const (
 	SFTPDisablePasswordLogin = "sftp_disable_password_login"
 
 	// traffic
-	TaskOfflineDownloadThreadsNum         = "offline_download_task_threads_num"
-	TaskOfflineDownloadTransferThreadsNum = "offline_download_transfer_task_threads_num"
-	TaskUploadThreadsNum                  = "upload_task_threads_num"
-	TaskCopyThreadsNum                    = "copy_task_threads_num"
-	TaskMoveThreadsNum                    = "move_task_threads_num"
-	TaskDecompressDownloadThreadsNum      = "decompress_download_task_threads_num"
-	TaskDecompressUploadThreadsNum        = "decompress_upload_task_threads_num"
-	StreamMaxClientDownloadSpeed          = "max_client_download_speed"
-	StreamMaxClientUploadSpeed            = "max_client_upload_speed"
-	StreamMaxServerDownloadSpeed          = "max_server_download_speed"
-	StreamMaxServerUploadSpeed            = "max_server_upload_speed"
+	TaskUploadThreadsNum             = "upload_task_threads_num"
+	TaskCopyThreadsNum               = "copy_task_threads_num"
+	TaskMoveThreadsNum               = "move_task_threads_num"
+	TaskDecompressDownloadThreadsNum = "decompress_download_task_threads_num"
+	TaskDecompressUploadThreadsNum   = "decompress_upload_task_threads_num"
+	StreamMaxClientDownloadSpeed     = "max_client_download_speed"
+	StreamMaxClientUploadSpeed       = "max_client_upload_speed"
+	StreamMaxServerDownloadSpeed     = "max_server_download_speed"
+	StreamMaxServerUploadSpeed       = "max_server_upload_speed"
 )
 
 const (
@@ -189,6 +144,5 @@ const (
 	RequestHeaderKey
 	UserAgentKey
 	PathKey
-	SharingIDKey
 	SkipHookKey
 )

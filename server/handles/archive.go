@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"io"
 	stdpath "path"
-	"strings"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/archive/tool"
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -75,11 +74,6 @@ func FsArchiveMetaSplit(c *gin.Context) {
 	var req ArchiveMetaReq
 	if err := c.ShouldBind(&req); err != nil {
 		common.ErrorResp(c, err, 400)
-		return
-	}
-	if strings.HasPrefix(req.Path, "/@s") {
-		req.Path = strings.TrimPrefix(req.Path, "/@s")
-		SharingArchiveMeta(c, &req)
 		return
 	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
@@ -160,11 +154,6 @@ func FsArchiveListSplit(c *gin.Context) {
 		return
 	}
 	req.Validate()
-	if strings.HasPrefix(req.Path, "/@s") {
-		req.Path = strings.TrimPrefix(req.Path, "/@s")
-		SharingArchiveList(c, &req)
-		return
-	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
 	if user.IsGuest() && user.Disabled {
 		common.ErrorStrResp(c, "Guest user is disabled, login please", 401)

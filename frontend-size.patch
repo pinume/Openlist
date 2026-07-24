@@ -1,0 +1,74 @@
+diff --git a/src/components/MonacoEditor.tsx b/src/components/MonacoEditor.tsx
+index 37e3b63..fa80b78 100644
+--- a/src/components/MonacoEditor.tsx
++++ b/src/components/MonacoEditor.tsx
+@@ -23,6 +23,11 @@ export const MonacoEditorLoader = (props: MonacoEditorProps) => {
+     paths: {
+       vs: monacoPath(),
+     },
++    "vs/nls": {
++      availableLanguages: {
++        "*": "zh-cn",
++      },
++    },
+   })
+   loader.init().then((m) => {
+     monaco = m
+diff --git a/vite.config.ts b/vite.config.ts
+index 70f94c2..85855e7 100644
+--- a/vite.config.ts
++++ b/vite.config.ts
+@@ -1,36 +1,8 @@
+ import path from "path"
+ import { defineConfig } from "vite"
+ import solidPlugin from "vite-plugin-solid"
+-import legacy from "@vitejs/plugin-legacy"
+ import { dynamicBase } from "vite-plugin-dynamic-base"
+ import { viteStaticCopy } from "vite-plugin-static-copy"
+-import type { Plugin } from "vite"
+-
+-// vite-plugin-dynamic-base converts data-src → src in its generateBundle hook,
+-// but @vitejs/plugin-legacy expects data-src on vite-legacy-polyfill so the
+-// legacy detection script can read it.  This plugin runs its generateBundle
+-// after dynamicBase (enforce:post, registered last) and restores data-src.
+-function fixLegacyPolyfillDataSrc(): Plugin {
+-  return {
+-    name: "fix-legacy-polyfill-data-src",
+-    enforce: "post",
+-    apply: "build",
+-    generateBundle(_, bundle) {
+-      for (const chunk of Object.values(bundle)) {
+-        if (
+-          chunk.type === "asset" &&
+-          chunk.fileName.endsWith(".html") &&
+-          typeof chunk.source === "string"
+-        ) {
+-          chunk.source = chunk.source.replace(
+-            /("id"\s*:\s*"vite-legacy-polyfill"[^}]*?)"src"\s*:/,
+-            (match) => match.replace(/"src"\s*:/, '"data-src":'),
+-          )
+-        }
+-      }
+-    },
+-  }
+-}
+ 
+ export default defineConfig({
+   resolve: {
+@@ -42,9 +14,6 @@ export default defineConfig({
+   },
+   plugins: [
+     solidPlugin(),
+-    legacy({
+-      targets: ["defaults"],
+-    }),
+     dynamicBase({
+       // dynamic public path var string, default window.__dynamic_base__
+       publicPath: "window.__dynamic_base__",
+@@ -87,6 +56,5 @@ export default defineConfig({
+         })
+       : null,
+-    fixLegacyPolyfillDataSrc(),
+   ],
+   base: process.env.NODE_ENV === "production" ? "/__dynamic_base__/" : "/",
+   // base: "/",
