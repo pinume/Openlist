@@ -44,6 +44,9 @@ deleteKeys(home.toolbar, [
   "send_aria2",
   "aria2_not_set",
   "send_aria2_success",
+  "batch_download",
+  "playlist_download",
+  "copy_link",
 ])
 delete home.preview
 deleteKeys(home.local_settings, [
@@ -128,7 +131,8 @@ entry = entry
   .replace(/^  (?:br|indexes|shares),\n/gm, "")
 await writeFile(entryPath, entry)
 
-const forbidden = /aria2|offline_download|qbittorrent|transmission/i
+const forbidden =
+  /aria2|offline_download|qbittorrent|transmission|batch_download|playlist_download|copy_link/i
 for (const name of await readdir(langDir)) {
   if (!name.endsWith(".json") && name !== "entry.ts") {
     continue

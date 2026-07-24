@@ -36,6 +36,8 @@ git -C "$work_root/frontend" apply "$repo_root/frontend-preview-build.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-folder-download.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-manual-download.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-header-logo.patch"
+git -C "$work_root/frontend" apply \
+  "$repo_root/frontend-download-options-removal.patch"
 
 find "$work_root/frontend/src/pages/home/previews" -depth -delete
 find "$work_root/frontend/src/components/artplayer-plugin-ass" -depth -delete
@@ -77,6 +79,9 @@ find "$work_root/frontend/src/lang/en" -depth -delete
       "offline_download|qbittorrent|transmission" dist/assets/store-*.js ||
     LC_ALL=C grep -Eqi -- \
       "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
+      dist/assets/*.js ||
+    LC_ALL=C grep -Eqi -- \
+      "batch_download|playlist_download|copy_link|#EXTM3U" \
       dist/assets/*.js; then
     echo "Removed feature code was found in the frontend build." >&2
     LC_ALL=C grep -Ril -- "aria2" dist >&2 || true
@@ -86,6 +91,10 @@ find "$work_root/frontend/src/lang/en" -depth -delete
     LC_ALL=C grep -Eil -- \
       "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
       dist/assets/*.js >&2 || true
+    LC_ALL=C grep -Eil -- \
+      "batch_download|playlist_download|copy_link|#EXTM3U" \
+      dist/assets/*.js \
+      >&2 || true
     exit 1
   fi
   package_download_chunk="$(

@@ -1,0 +1,325 @@
+# Remove batch downloads, M3U playlist generation, and copy-link entry points
+# while retaining single-file and folder package downloads.
+diff --git a/src/hooks/index.ts b/src/hooks/index.ts
+index 2d80d0e..56d9197 100644
+--- a/src/hooks/index.ts
++++ b/src/hooks/index.ts
+@@ -5,5 +5,4 @@ export * from "./useTitle"
+ export * from "./usePath"
+ export * from "./useLink"
+ export * from "./useUtil"
+-export * from "./useDownload"
+ export * from "./useCDN"
+diff --git a/src/hooks/useLink.ts b/src/hooks/useLink.ts
+index 5eadd8f..10fa3a7 100644
+--- a/src/hooks/useLink.ts
++++ b/src/hooks/useLink.ts
+@@ -8,7 +8,7 @@ import {
+   pathJoin,
+   standardizePath,
+ } from "~/utils"
+-import { useRouter, useUtil } from "."
++import { useRouter } from "."
+ import { cookieStorage } from "@solid-primitives/storage"
+
+ type URLType = "page" | "direct" | "proxy"
+@@ -98,7 +98,7 @@ export const useLink = () => {
+ }
+
+ export const useSelectedLink = () => {
+-  const { pageLink, rawLink: rawUrl } = useLink()
++  const { rawLink: rawUrl } = useLink()
+   const rawLinks = (encodeAll?: boolean) => {
+     return selectedObjs()
+       .filter((obj) => !obj.is_dir)
+@@ -106,30 +106,5 @@ export const useSelectedLink = () => {
+   }
+   return {
+     rawLinks: rawLinks,
+-    linksText: () => {
+-      return selectedObjs()
+-        .map((obj) => (obj.is_dir ? pageLink(obj, true) : rawUrl(obj, true)))
+-        .join("\n")
+-    },
+-    rawLinksText: (encodeAll?: boolean) => {
+-      return rawLinks(encodeAll).join("\n")
+-    },
+-  }
+-}
+-
+-export const useCopyLink = () => {
+-  const { copy } = useUtil()
+-  const { linksText, rawLinksText } = useSelectedLink()
+-  const { currentObjLink } = useLink()
+-  return {
+-    copySelectedLink: () => {
+-      copy(linksText())
+-    },
+-    copySelectedRawLink: (encodeAll?: boolean) => {
+-      copy(rawLinksText(encodeAll))
+-    },
+-    copyCurrentRawLink: (encodeAll?: boolean) => {
+-      copy(currentObjLink(encodeAll))
+-    },
+   }
+ }
+diff --git a/src/hooks/useDownload.ts b/src/hooks/useDownload.ts
+deleted file mode 100644
+index 9c7f005..0000000
+--- a/src/hooks/useDownload.ts
++++ /dev/null
+@@ -1,40 +0,0 @@
+-import { selectedObjs as _selectedObjs } from "~/store"
+-import { pathBase } from "~/utils"
+-import { useRouter, useT } from "~/hooks"
+-import { useSelectedLink } from "~/hooks"
+-export const useDownload = () => {
+-  const { rawLinks } = useSelectedLink()
+-  const t = useT()
+-  const { pathname } = useRouter()
+-  return {
+-    batchDownloadSelected: () => {
+-      const urls = rawLinks(true)
+-      urls.forEach((url) => {
+-        window.open(url, "_blank")
+-      })
+-    },
+-    playlistDownloadSelected: () => {
+-      const selectedObjs = _selectedObjs().filter((obj) => !obj.is_dir)
+-      let saveName = pathBase(pathname())
+-      if (selectedObjs.length === 1) {
+-        saveName = selectedObjs[0].name
+-      }
+-      if (!saveName) {
+-        saveName = t("manage.sidemenu.home")
+-      }
+-      const m3u8Content = selectedObjs.reduce(
+-        (acc, obj, index) =>
+-          `${acc}#EXTINF:-1,${obj.name}\n${rawLinks(true)[index]}\n`,
+-        "#EXTM3U\n",
+-      )
+-      const m3u8Blob = new Blob([m3u8Content], {
+-        type: "application/x-mpegURL",
+-      })
+-      const a = document.createElement("a")
+-      a.href = URL.createObjectURL(m3u8Blob)
+-      a.download = `${saveName}.m3u8`
+-      a.click()
+-      URL.revokeObjectURL(a.href)
+-    },
+-  }
+-}
+diff --git a/src/pages/home/folder/context-menu.tsx b/src/pages/home/folder/context-menu.tsx
+index 69908d8..d950ac6 100644
+--- a/src/pages/home/folder/context-menu.tsx
++++ b/src/pages/home/folder/context-menu.tsx
+@@ -1,5 +1,5 @@
+ import { Menu, Item, Submenu } from "solid-contextmenu"
+-import { useCopyLink, useDownload, useRouter, useT } from "~/hooks"
++import { useRouter, useSelectedLink, useT } from "~/hooks"
+ import "solid-contextmenu/dist/style.css"
+ import { HStack, Icon, Text, useColorMode } from "@hope-ui/solid"
+ import { operations } from "../toolbar/operations"
+@@ -35,8 +35,7 @@ const ItemContent = (props: { name: string }) => {
+ export const ContextMenu = () => {
+   const t = useT()
+   const { colorMode } = useColorMode()
+-  const { copySelectedLink } = useCopyLink()
+-  const { batchDownloadSelected, playlistDownloadSelected } = useDownload()
++  const { rawLinks } = useSelectedLink()
+   const canPackageDownload = () => {
+     return UserMethods.is_admin(me()) || getSettingBool("package_download")
+   }
+@@ -77,9 +76,6 @@ export const ContextMenu = () => {
+         <ItemContent name="decompress" />
+       </Item>
+       <Show when={oneChecked()}>
+-        <Item onClick={copySelectedLink}>
+-          <ItemContent name="copy_link" />
+-        </Item>
+         <Item
+           onClick={({ props }) => {
+             if (props.is_dir) {
+@@ -89,7 +85,8 @@ export const ContextMenu = () => {
+               }
+               bus.emit("tool", "package_download")
+             } else {
+-              batchDownloadSelected()
++              const url = rawLinks(true)[0]
++              if (url) window.open(url, "_blank")
+             }
+           }}
+         >
+@@ -97,26 +94,13 @@ export const ContextMenu = () => {
+         </Item>
+       </Show>
+       <Show when={!oneChecked() && haveSelected()}>
+-        <Item onClick={copySelectedLink}>
+-          <ItemContent name="copy_link" />
+-        </Item>
+-        <Submenu label={<ItemContent name="download" />}>
+-          <Item onClick={batchDownloadSelected}>
+-            {t("home.toolbar.batch_download")}
+-          </Item>
+-          <Show
+-            when={
+-              UserMethods.is_admin(me()) || getSettingBool("package_download")
+-            }
+-          >
++        <Show when={canPackageDownload()}>
++          <Submenu label={<ItemContent name="download" />}>
+             <Item onClick={() => bus.emit("tool", "package_download")}>
+               {t("home.toolbar.package_download")}
+             </Item>
+-            <Item onClick={playlistDownloadSelected}>
+-              {t("home.toolbar.playlist_download")}
+-            </Item>
+-          </Show>
+-        </Submenu>
++          </Submenu>
++        </Show>
+       </Show>
+     </Menu>
+   )
+diff --git a/src/pages/home/toolbar/Center.tsx b/src/pages/home/toolbar/Center.tsx
+index cc89ba0..de3bba2 100644
+--- a/src/pages/home/toolbar/Center.tsx
++++ b/src/pages/home/toolbar/Center.tsx
+@@ -8,7 +8,6 @@ import {
+   State,
+   userCan,
+ } from "~/store"
+-import { CopyLink } from "./CopyLink"
+ import { CenterIcon } from "./Icon"
+ import { bus } from "~/utils"
+ import { Download } from "./Download"
+@@ -69,7 +68,6 @@ export const Center = () => {
+                   }}
+                 </For>
+               </Show>
+-              <CopyLink />
+               <Download />
+               <CenterIcon
+                 name="cancel_select"
+diff --git a/src/pages/home/toolbar/CopyLink.tsx b/src/pages/home/toolbar/CopyLink.tsx
+deleted file mode 100644
+index e6e6a9d..0000000
+--- a/src/pages/home/toolbar/CopyLink.tsx
++++ /dev/null
+@@ -1,7 +0,0 @@
+-import { useCopyLink } from "~/hooks"
+-import { CenterIcon } from "./Icon"
+-
+-export const CopyLink = () => {
+-  const { copySelectedLink } = useCopyLink()
+-  return <CenterIcon name="copy_link" onClick={copySelectedLink} />
+-}
+diff --git a/src/pages/home/toolbar/Download.tsx b/src/pages/home/toolbar/Download.tsx
+index 04a22db..3c30a9f 100644
+--- a/src/pages/home/toolbar/Download.tsx
++++ b/src/pages/home/toolbar/Download.tsx
+@@ -1,8 +1,4 @@
+ import {
+-  Menu,
+-  MenuTrigger,
+-  MenuContent,
+-  MenuItem,
+   Button,
+   Modal,
+   ModalBody,
+@@ -14,55 +10,33 @@ import {
+ } from "@hope-ui/solid"
+ import { createSignal, lazy, onCleanup, Show, Suspense } from "solid-js"
+ import { FullLoading } from "~/components"
+-import { useT, useDownload } from "~/hooks"
+-import { getSettingBool, me } from "~/store"
+-import { UserMethods } from "~/types"
++import { useT } from "~/hooks"
++import { getSettingBool } from "~/store"
+-import { bus } from "~/utils"
++import { bus, notify } from "~/utils"
+ import { CenterIcon } from "./Icon"
+
+-export const Download = () => {
+-  const t = useT()
+-  const colorScheme = "neutral"
+-  const { batchDownloadSelected, playlistDownloadSelected } = useDownload()
+-  return (
+-    <Menu placement="top" offset={10}>
+-      <MenuTrigger as={CenterIcon} name="download" />
+-      <MenuContent>
+-        <MenuItem colorScheme={colorScheme} onSelect={batchDownloadSelected}>
+-          {t("home.toolbar.batch_download")}
+-        </MenuItem>
+-        <Show
+-          when={
+-            UserMethods.is_admin(me()) || getSettingBool("package_download")
+-          }
+-        >
+-          <MenuItem
+-            colorScheme={colorScheme}
+-            onSelect={() => {
+-              bus.emit("tool", "package_download")
+-            }}
+-          >
+-            {t("home.toolbar.package_download")}
+-          </MenuItem>
+-          <MenuItem
+-            colorScheme={colorScheme}
+-            onSelect={playlistDownloadSelected}
+-          >
+-            {t("home.toolbar.playlist_download")}
+-          </MenuItem>
+-        </Show>
+-      </MenuContent>
+-    </Menu>
+-  )
+-}
++export const Download = () => (
++  <CenterIcon
++    name="download"
++    onClick={() => {
++      bus.emit("tool", "package_download_direct")
++    }}
++  />
++)
+
+ const PackageDownload = lazy(() => import("./PackageDownload"))
+
+ export const PackageDownloadModal = () => {
+   const t = useT()
+   const handler = (name: string) => {
+-    if (name === "package_download") {
++    if (name === "package_download" || name === "package_download_direct") {
+-      if (!getSettingBool("package_download")) return
++      if (!getSettingBool("package_download")) {
++        notify.warning(t("home.toolbar.package_download_disabled"))
++        return
++      }
++      setShow(
++        name === "package_download_direct" ? "package_download" : "pre_tips",
++      )
+       onOpen()
+     }
+   }
+diff --git a/src/pages/home/toolbar/operations.ts b/src/pages/home/toolbar/operations.ts
+index e803aa0..ad0851f 100644
+--- a/src/pages/home/toolbar/operations.ts
++++ b/src/pages/home/toolbar/operations.ts
+@@ -2,7 +2,7 @@ import { IconTypes } from "solid-icons"
+ import { TiDeleteOutline } from "solid-icons/ti"
+ import { CgRename } from "solid-icons/cg"
+ import { TbArchive, TbFileArrowRight } from "solid-icons/tb"
+-import { TbCopy, TbLink } from "solid-icons/tb"
++import { TbCopy } from "solid-icons/tb"
+ import { AiTwotoneDelete } from "solid-icons/ai"
+ import { CgFileAdd, CgFolderAdd, CgFolderRemove } from "solid-icons/cg"
+ import { AiOutlineCloudDownload } from "solid-icons/ai"
+@@ -22,7 +22,6 @@ export const operations: Operations = {
+   move: { icon: TbFileArrowRight, color: "$warning9" },
+   delete: { icon: AiTwotoneDelete, color: "$danger9" },
+   decompress: { icon: TbArchive, color: "$neutral9" },
+-  copy_link: { icon: TbLink, color: "$info9" },
+   mkdir: { icon: CgFolderAdd, p: true },
+   recursive_move: { icon: ImMoveUp, p: true },
+   remove_empty_directory: { icon: CgFolderRemove, p: true },
