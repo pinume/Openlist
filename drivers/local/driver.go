@@ -1,30 +1,22 @@
 package local
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io/fs"
-	"net/http"
 	"os"
 	stdpath "path"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
-	"github.com/OpenListTeam/OpenList/v4/internal/sign"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
-	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/OpenListTeam/times"
 	log "github.com/sirupsen/logrus"
-	_ "golang.org/x/image/webp"
 )
 
 type Local struct {
@@ -34,14 +26,6 @@ type Local struct {
 
 	// directory size data
 	directoryMap DirectoryMap
-
-	// zero means no limit
-	thumbConcurrency int
-	thumbTokenBucket TokenBucket
-
-	// video thumb position
-	videoThumbPos             float64
-	videoThumbPosIsPercentage bool
 }
 
 func (d *Local) Config() driver.Config {
@@ -77,50 +61,6 @@ func (d *Local) Init(ctx context.Context) error {
 	} else {
 		d.directoryMap.Clear()
 	}
-	if d.ThumbCacheFolder != "" && !utils.Exists(d.ThumbCacheFolder) {
-		err := os.MkdirAll(d.ThumbCacheFolder, os.FileMode(d.mkdirPerm))
-		if err != nil {
-			return err
-		}
-	}
-	if d.ThumbConcurrency != "" {
-		v, err := strconv.ParseUint(d.ThumbConcurrency, 10, 32)
-		if err != nil {
-			return err
-		}
-		d.thumbConcurrency = int(v)
-	}
-	if d.thumbConcurrency == 0 {
-		d.thumbTokenBucket = NewNopTokenBucket()
-	} else {
-		d.thumbTokenBucket = NewStaticTokenBucketWithMigration(d.thumbTokenBucket, d.thumbConcurrency)
-	}
-	// Check the VideoThumbPos value
-	if d.VideoThumbPos == "" {
-		d.VideoThumbPos = "20%"
-	}
-	if strings.HasSuffix(d.VideoThumbPos, "%") {
-		percentage := strings.TrimSuffix(d.VideoThumbPos, "%")
-		val, err := strconv.ParseFloat(percentage, 64)
-		if err != nil {
-			return fmt.Errorf("invalid video_thumb_pos value: %s, err: %s", d.VideoThumbPos, err)
-		}
-		if val < 0 || val > 100 {
-			return fmt.Errorf("invalid video_thumb_pos value: %s, the precentage must be a number between 0 and 100", d.VideoThumbPos)
-		}
-		d.videoThumbPosIsPercentage = true
-		d.videoThumbPos = val / 100
-	} else {
-		val, err := strconv.ParseFloat(d.VideoThumbPos, 64)
-		if err != nil {
-			return fmt.Errorf("invalid video_thumb_pos value: %s, err: %s", d.VideoThumbPos, err)
-		}
-		if val < 0 {
-			return fmt.Errorf("invalid video_thumb_pos value: %s, the time must be a positive number", d.VideoThumbPos)
-		}
-		d.videoThumbPosIsPercentage = false
-		d.videoThumbPos = val
-	}
 	return nil
 }
 
@@ -144,22 +84,13 @@ func (d *Local) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([
 	var files []model.Obj
 	for _, f := range rawFiles {
 		if d.ShowHidden || !isHidden(f, fullPath) {
-			files = append(files, d.FileInfoToObj(ctx, f, args.ReqPath, fullPath))
+			files = append(files, d.FileInfoToObj(f, fullPath))
 		}
 	}
 	return files, nil
 }
 
-func (d *Local) FileInfoToObj(ctx context.Context, f fs.FileInfo, reqPath string, fullPath string) model.Obj {
-	thumb := ""
-	if d.Thumbnail {
-		typeName := utils.GetFileType(f.Name())
-		if typeName == conf.IMAGE || typeName == conf.VIDEO {
-			thumb = common.GetApiUrl(ctx) + stdpath.Join("/d", reqPath, f.Name())
-			thumb = utils.EncodePath(thumb, true)
-			thumb += "?type=thumb&sign=" + sign.Sign(stdpath.Join(reqPath, f.Name()))
-		}
-	}
+func (d *Local) FileInfoToObj(f fs.FileInfo, fullPath string) model.Obj {
 	isFolder := f.IsDir() || isSymlinkDir(f, fullPath)
 	var size int64
 	if isFolder {
@@ -178,18 +109,13 @@ func (d *Local) FileInfoToObj(ctx context.Context, f fs.FileInfo, reqPath string
 		}
 	}
 
-	file := model.ObjThumb{
-		Object: model.Object{
-			Path:     filepath.Join(fullPath, f.Name()),
-			Name:     f.Name(),
-			Modified: f.ModTime(),
-			Size:     size,
-			IsFolder: isFolder,
-			Ctime:    ctime,
-		},
-		Thumbnail: model.Thumbnail{
-			Thumbnail: thumb,
-		},
+	file := model.Object{
+		Path:     filepath.Join(fullPath, f.Name()),
+		Name:     f.Name(),
+		Modified: f.ModTime(),
+		Size:     size,
+		IsFolder: isFolder,
+		Ctime:    ctime,
 	}
 	return &file
 }
@@ -234,46 +160,12 @@ func (d *Local) Get(ctx context.Context, path string) (model.Obj, error) {
 func (d *Local) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {
 	fullPath := file.GetPath()
 	link := &model.Link{}
-	var MFile model.File
-	if args.Type == "thumb" && utils.Ext(file.GetName()) != "svg" {
-		var buf *bytes.Buffer
-		var thumbPath *string
-		err := d.thumbTokenBucket.Do(ctx, func() error {
-			var err error
-			buf, thumbPath, err = d.getThumb(file)
-			return err
-		})
-		if err != nil {
-			return nil, err
-		}
-		link.Header = http.Header{
-			"Content-Type": []string{"image/png"},
-		}
-		if thumbPath != nil {
-			open, err := os.Open(*thumbPath)
-			if err != nil {
-				return nil, err
-			}
-			// Get thumbnail file size for Content-Length
-			stat, err := open.Stat()
-			if err != nil {
-				open.Close()
-				return nil, err
-			}
-			link.ContentLength = int64(stat.Size())
-			MFile = open
-		} else {
-			MFile = bytes.NewReader(buf.Bytes())
-			link.ContentLength = int64(buf.Len())
-		}
-	} else {
-		open, err := os.Open(fullPath)
-		if err != nil {
-			return nil, err
-		}
-		link.ContentLength = file.GetSize()
-		MFile = open
+	open, err := os.Open(fullPath)
+	if err != nil {
+		return nil, err
 	}
+	link.ContentLength = file.GetSize()
+	var MFile model.File = open
 	link.SyncClosers.AddIfCloser(MFile)
 	link.RangeReader = stream.GetRangeReaderFromMFile(link.ContentLength, MFile)
 	link.RequireReference = link.SyncClosers.Length() > 0
@@ -389,9 +281,6 @@ func (d *Local) Remove(ctx context.Context, obj model.Obj) error {
 	if err != nil {
 		return err
 	}
-	if !obj.IsDir() {
-		d.removeThumbCache(obj.GetPath())
-	}
 	if obj.IsDir() {
 		if d.directoryMap.Has(obj.GetPath()) {
 			d.directoryMap.DeleteDirNode(obj.GetPath())
@@ -410,24 +299,42 @@ func (d *Local) Remove(ctx context.Context, obj model.Obj) error {
 
 func (d *Local) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) error {
 	fullPath := filepath.Join(dstDir.GetPath(), stream.GetName())
-	out, err := os.Create(fullPath)
+	var existingMode fs.FileMode
+	if info, statErr := os.Stat(fullPath); statErr == nil {
+		existingMode = info.Mode().Perm()
+	}
+	out, err := createUploadTemp(dstDir.GetPath())
 	if err != nil {
 		return err
 	}
+	tempPath := out.Name()
+	committed := false
 	defer func() {
 		_ = out.Close()
-		if errors.Is(err, context.Canceled) {
-			_ = os.Remove(fullPath)
+		if !committed {
+			_ = os.Remove(tempPath)
 		}
 	}()
 	err = utils.CopyWithCtx(ctx, out, stream, stream.GetSize(), up)
 	if err != nil {
 		return err
 	}
-	err = os.Chtimes(fullPath, stream.ModTime(), stream.ModTime())
-	if err != nil {
-		log.Errorf("[local] failed to change time of %s: %s", fullPath, err)
+	if err = out.Close(); err != nil {
+		return err
 	}
+	if existingMode != 0 {
+		if err = os.Chmod(tempPath, existingMode); err != nil {
+			return err
+		}
+	}
+	err = os.Chtimes(tempPath, stream.ModTime(), stream.ModTime())
+	if err != nil {
+		log.Errorf("[local] failed to change time of %s: %s", tempPath, err)
+	}
+	if err = os.Rename(tempPath, fullPath); err != nil {
+		return err
+	}
+	committed = true
 	if d.directoryMap.Has(dstDir.GetPath()) {
 		d.directoryMap.UpdateDirSize(dstDir.GetPath())
 		d.directoryMap.UpdateDirParents(dstDir.GetPath())

@@ -3,8 +3,6 @@ package dropbox
 import (
 	"context"
 	"fmt"
-	"io"
-	"math"
 	"net/http"
 	"time"
 
@@ -13,7 +11,6 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/go-resty/resty/v2"
-	log "github.com/sirupsen/logrus"
 )
 
 type Dropbox struct {
@@ -164,71 +161,20 @@ func (d *Dropbox) Remove(ctx context.Context, obj model.Obj) error {
 }
 
 func (d *Dropbox) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) error {
-	// 1. start
-	sessionId, err := d.startUploadSession(ctx)
-	if err != nil {
-		return err
-	}
-
-	// 2.append
-	// A single request should not upload more than 150 MB, and each call must be multiple of 4MB  (except for last call)
-	const PartSize = 20971520
-	count := 1
-	if stream.GetSize() > PartSize {
-		count = int(math.Ceil(float64(stream.GetSize()) / float64(PartSize)))
-	}
-	offset := int64(0)
-
-	for i := 0; i < count; i++ {
-		if utils.IsCanceled(ctx) {
-			return ctx.Err()
-		}
-
-		start := i * PartSize
-		byteSize := stream.GetSize() - int64(start)
-		if byteSize > PartSize {
-			byteSize = PartSize
-		}
-
-		url := d.contentBase + "/2/files/upload_session/append_v2"
-		reader := driver.NewLimitedUploadStream(ctx, io.LimitReader(stream, PartSize))
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
-		if err != nil {
-			log.Errorf("failed to update file when append to upload session, err: %+v", err)
+	if stream.GetSize() < 0 {
+		if _, err := stream.CacheFullAndWriter(nil, nil); err != nil {
 			return err
 		}
-		req.Header.Set("Content-Type", "application/octet-stream")
-		req.Header.Set("Authorization", "Bearer "+d.AccessToken)
-
-		args := UploadAppendArgs{
-			Close: false,
-			Cursor: UploadCursor{
-				Offset:    offset,
-				SessionID: sessionId,
-			},
-		}
-		argsJson, err := utils.Json.MarshalToString(args)
-		if err != nil {
-			return err
-		}
-		req.Header.Set("Dropbox-API-Arg", argsJson)
-
-		res, err := base.HttpClient.Do(req)
-		if err != nil {
-			return err
-		}
-		_ = res.Body.Close()
-		up(float64(i+1) * 100 / float64(count))
-		offset += byteSize
 	}
-	// 3.finish
+
 	toPath := dstDir.GetPath() + "/" + stream.GetName()
-	err2 := d.finishUploadSession(ctx, toPath, offset, sessionId)
-	if err2 != nil {
-		return err2
+	const simpleUploadLimit = 150 * 1024 * 1024
+	if stream.GetSize() <= simpleUploadLimit {
+		return d.upload(ctx, toPath, stream, up)
 	}
 
-	return err
+	const partSize = 64 * 1024 * 1024
+	return d.uploadSession(ctx, toPath, stream, up, partSize)
 }
 
 var _ driver.Driver = (*Dropbox)(nil)

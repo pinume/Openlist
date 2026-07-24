@@ -30,6 +30,29 @@ git -C "$work_root/frontend" apply "$repo_root/frontend-chinese-ui.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-size.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-aria2-removal.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-tinylist.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-preview-removal.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-preview-dependencies.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-preview-build.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-folder-download.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-manual-download.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-header-logo.patch"
+
+find "$work_root/frontend/src/pages/home/previews" -depth -delete
+find "$work_root/frontend/src/components/artplayer-plugin-ass" -depth -delete
+find "$work_root/frontend/public/images" -maxdepth 1 -type f \
+  \( -name 'figplayer.webp' -o -name 'iina.webp' -o -name 'infuse.webp' \
+  -o -name 'mpv.webp' -o -name 'mxplayer*.webp' -o -name 'nplayer.webp' \
+  -o -name 'omniplayer.webp' -o -name 'potplayer.webp' \
+  -o -name 'vlc.webp' \) -delete
+rm -f \
+  "$work_root/frontend/src/components/EncodingSelect.tsx" \
+  "$work_root/frontend/src/components/Markdown.tsx" \
+  "$work_root/frontend/src/components/MonacoEditor.tsx" \
+  "$work_root/frontend/src/components/markdown.css" \
+  "$work_root/frontend/src/pages/home/Readme.tsx" \
+  "$work_root/frontend/src/pages/home/file/open-with.tsx" \
+  "$work_root/frontend/src/pages/home/folder/ImageItem.tsx" \
+  "$work_root/frontend/src/pages/home/folder/Images.tsx"
 
 curl -fsSL "$i18n_url" -o "$work_root/i18n.tar.gz"
 printf '%s  %s\n' "$i18n_sha256" "$work_root/i18n.tar.gz" | sha256sum --check -
@@ -42,19 +65,35 @@ find "$work_root/frontend/src/lang/en" -depth -delete
   cd "$work_root/frontend"
   corepack pnpm install --frozen-lockfile
   corepack pnpm build
-  find dist/static/monaco-editor/vs -type f \
-    -name 'nls.messages.*.js.js' \
-    ! -name 'nls.messages.js.js' \
-    ! -name 'nls.messages.zh-cn.js.js' \
-    -delete
+  if [[ -d dist/static/monaco-editor/vs ]]; then
+    find dist/static/monaco-editor/vs -type f \
+      -name 'nls.messages.*.js.js' \
+      ! -name 'nls.messages.js.js' \
+      ! -name 'nls.messages.zh-cn.js.js' \
+      -delete
+  fi
   if LC_ALL=C grep -Rqi -- "aria2" dist ||
     LC_ALL=C grep -Eqi -- \
-      "offline_download|qbittorrent|transmission" dist/assets/store-*.js; then
+      "offline_download|qbittorrent|transmission" dist/assets/store-*.js ||
+    LC_ALL=C grep -Eqi -- \
+      "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
+      dist/assets/*.js; then
     echo "Removed feature code was found in the frontend build." >&2
     LC_ALL=C grep -Ril -- "aria2" dist >&2 || true
     LC_ALL=C grep -Eil -- \
       "offline_download|qbittorrent|transmission" dist/assets/store-*.js \
       >&2 || true
+    LC_ALL=C grep -Eil -- \
+      "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
+      dist/assets/*.js >&2 || true
+    exit 1
+  fi
+  package_download_chunk="$(
+    find dist/assets -maxdepth 1 -type f -name 'PackageDownload-*.js' -print -quit
+  )"
+  if [[ -z "$package_download_chunk" ]] ||
+    ! LC_ALL=C grep -q -- '\.zip' "$package_download_chunk"; then
+    echo "Folder package download was not found in the frontend build." >&2
     exit 1
   fi
 )

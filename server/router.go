@@ -44,19 +44,11 @@ func Init(e *gin.Engine) {
 
 	downloadLimiter := middlewares.DownloadRateLimiter(stream.ClientDownloadLimit)
 	signCheck := middlewares.Down(sign.Verify)
-	requiredAuth := middlewares.Auth(false)
-	g.GET("/d/*path", middlewares.PathParse, requiredAuth, signCheck, middlewares.UserPathAccess, downloadLimiter, handles.Down)
-	g.GET("/p/*path", middlewares.PathParse, requiredAuth, signCheck, middlewares.UserPathAccess, downloadLimiter, handles.Proxy)
-	g.HEAD("/d/*path", middlewares.PathParse, requiredAuth, signCheck, middlewares.UserPathAccess, handles.Down)
-	g.HEAD("/p/*path", middlewares.PathParse, requiredAuth, signCheck, middlewares.UserPathAccess, handles.Proxy)
-	archiveSignCheck := middlewares.Down(sign.VerifyArchive)
-	g.GET("/ad/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, downloadLimiter, handles.ArchiveDown)
-	g.GET("/ap/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, downloadLimiter, handles.ArchiveProxy)
-	g.GET("/ae/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, downloadLimiter, handles.ArchiveInternalExtract)
-	g.HEAD("/ad/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, handles.ArchiveDown)
-	g.HEAD("/ap/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, handles.ArchiveProxy)
-	g.HEAD("/ae/*path", middlewares.PathParse, requiredAuth, archiveSignCheck, middlewares.UserPathAccess, handles.ArchiveInternalExtract)
-
+	downloadAuth := middlewares.DownloadAuth(sign.Verify)
+	g.GET("/d/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, downloadLimiter, handles.Down)
+	g.GET("/p/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, downloadLimiter, handles.Proxy)
+	g.HEAD("/d/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, handles.Down)
+	g.HEAD("/p/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, handles.Proxy)
 	api := g.Group("/api")
 	auth := api.Group("", middlewares.Auth(false))
 	webauthn := api.Group("/authn", middlewares.Authn)
@@ -169,9 +161,6 @@ func admin(g *gin.RouterGroup) {
 func fsRead(g *gin.RouterGroup) {
 	g.Any("/list", handles.FsListSplit)
 	g.Any("/get", handles.FsGetSplit)
-	a := g.Group("/archive")
-	a.Any("/meta", handles.FsArchiveMetaSplit)
-	a.Any("/list", handles.FsArchiveListSplit)
 }
 
 func _fs(g *gin.RouterGroup) {

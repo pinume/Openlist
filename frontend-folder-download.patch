@@ -1,0 +1,38 @@
+diff --git a/src/pages/home/toolbar/PackageDownload.tsx b/src/pages/home/toolbar/PackageDownload.tsx
+index 4f8de2a..4e26938 100644
+--- a/src/pages/home/toolbar/PackageDownload.tsx
++++ b/src/pages/home/toolbar/PackageDownload.tsx
+@@ -19,7 +19,6 @@ const trimSlash = (str: string) => {
+   return str.replace(/^\/+|\/+$/g, "")
+ }
+ 
+-let totalSize = 0
+ interface File {
+   path: string
+   url: string
+@@ -43,7 +42,6 @@ const PackageDownload = (props: { onClose: () => void }) => {
+     obj: Obj,
+   ): Promise<File[] | string> => {
+     if (!obj.is_dir) {
+-      totalSize += obj.size
+       return [
+         {
+           path: pathJoin(pre, obj.name),
+@@ -82,9 +80,6 @@ const PackageDownload = (props: { onClose: () => void }) => {
+     if (!saveName) {
+       saveName = t("manage.sidemenu.home")
+     }
+-    let fileStream = streamSaver.createWriteStream(`${saveName}.zip`, {
+-      size: totalSize,
+-    })
+     setCur(t("home.package_download.fetching_struct"))
+     setStatus(2)
+     const downFiles: File[] = []
+@@ -99,6 +94,7 @@ const PackageDownload = (props: { onClose: () => void }) => {
+         downFiles.push(...res)
+       }
+     }
++    const fileStream = streamSaver.createWriteStream(`${saveName}.zip`)
+     setCur(t("home.package_download.downloading"))
+     setStatus(3)
+     let fileArr = downFiles.values()

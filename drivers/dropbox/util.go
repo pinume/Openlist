@@ -2,12 +2,15 @@ package dropbox
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 
 	"github.com/OpenListTeam/OpenList/v4/drivers/base"
+	"github.com/OpenListTeam/OpenList/v4/internal/driver"
+	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/go-resty/resty/v2"
@@ -166,12 +169,20 @@ func (d *Dropbox) getFiles(ctx context.Context, path string) ([]File, error) {
 	return res, nil
 }
 
-func (d *Dropbox) finishUploadSession(ctx context.Context, toPath string, offset int64, sessionId string) error {
+func (d *Dropbox) finishUploadSession(
+	ctx context.Context,
+	toPath string,
+	offset int64,
+	sessionID string,
+	content io.Reader,
+	contentLength int64,
+) error {
 	url := d.contentBase + "/2/files/upload_session/finish"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, content)
 	if err != nil {
 		return err
 	}
+	req.ContentLength = contentLength
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
 	if d.RootNamespaceId != "" {
@@ -183,22 +194,10 @@ func (d *Dropbox) finishUploadSession(ctx context.Context, toPath string, offset
 	}
 
 	uploadFinishArgs := UploadFinishArgs{
-		Commit: struct {
-			Autorename     bool   `json:"autorename"`
-			Mode           string `json:"mode"`
-			Mute           bool   `json:"mute"`
-			Path           string `json:"path"`
-			StrictConflict bool   `json:"strict_conflict"`
-		}{
-			Autorename:     true,
-			Mode:           "add",
-			Mute:           false,
-			Path:           toPath,
-			StrictConflict: false,
-		},
+		Commit: newUploadCommit(toPath),
 		Cursor: UploadCursor{
 			Offset:    offset,
-			SessionID: sessionId,
+			SessionID: sessionID,
 		},
 	}
 
@@ -213,16 +212,16 @@ func (d *Dropbox) finishUploadSession(ctx context.Context, toPath string, offset
 		log.Errorf("failed to update file when finish session, err: %+v", err)
 		return err
 	}
-	_ = res.Body.Close()
-	return nil
+	return checkContentResponse(res)
 }
 
-func (d *Dropbox) startUploadSession(ctx context.Context) (string, error) {
+func (d *Dropbox) startUploadSession(ctx context.Context, content io.Reader, contentLength int64) (string, error) {
 	url := d.contentBase + "/2/files/upload_session/start"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, content)
 	if err != nil {
 		return "", err
 	}
+	req.ContentLength = contentLength
 	req.Header.Set("Content-Type", "application/octet-stream")
 	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
 	if d.RootNamespaceId != "" {
@@ -240,11 +239,150 @@ func (d *Dropbox) startUploadSession(ctx context.Context) (string, error) {
 		return "", err
 	}
 
+	if res.StatusCode != http.StatusOK {
+		return "", checkContentResponse(res)
+	}
 	body, err := io.ReadAll(res.Body)
 	sessionId := utils.Json.Get(body, "session_id").ToString()
 
 	_ = res.Body.Close()
+	if err != nil {
+		return "", err
+	}
+	if sessionId == "" {
+		return "", errors.New("dropbox returned an empty upload session ID")
+	}
 	return sessionId, nil
+}
+
+func (d *Dropbox) appendUploadSession(
+	ctx context.Context,
+	sessionID string,
+	offset int64,
+	content io.Reader,
+	contentLength int64,
+) error {
+	url := d.contentBase + "/2/files/upload_session/append_v2"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, content)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = contentLength
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
+	args := UploadAppendArgs{
+		Close: false,
+		Cursor: UploadCursor{
+			Offset:    offset,
+			SessionID: sessionID,
+		},
+	}
+	argsJSON, err := utils.Json.MarshalToString(args)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Dropbox-API-Arg", argsJSON)
+
+	res, err := base.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return checkContentResponse(res)
+}
+
+func newUploadCommit(path string) UploadCommit {
+	return UploadCommit{
+		Autorename:     true,
+		Mode:           "add",
+		Mute:           false,
+		Path:           path,
+		StrictConflict: false,
+	}
+}
+
+func (d *Dropbox) upload(ctx context.Context, path string, stream model.FileStreamer, up driver.UpdateProgress) error {
+	url := d.contentBase + "/2/files/upload"
+	progress := driver.NewProgress(stream.GetSize(), up)
+	reader := driver.NewLimitedUploadStream(ctx, io.TeeReader(stream, progress))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, reader)
+	if err != nil {
+		return err
+	}
+	req.ContentLength = stream.GetSize()
+	req.Header.Set("Content-Type", "application/octet-stream")
+	req.Header.Set("Authorization", "Bearer "+d.AccessToken)
+	if d.RootNamespaceId != "" {
+		pathRoot, err := d.buildPathRootHeader()
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Dropbox-API-Path-Root", pathRoot)
+	}
+	args, err := utils.Json.MarshalToString(newUploadCommit(path))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Dropbox-API-Arg", args)
+
+	res, err := base.HttpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	return checkContentResponse(res)
+}
+
+func (d *Dropbox) uploadSession(
+	ctx context.Context,
+	path string,
+	stream model.FileStreamer,
+	up driver.UpdateProgress,
+	partSize int64,
+) error {
+	if partSize <= 0 {
+		return errors.New("Dropbox upload part size must be positive")
+	}
+
+	total := stream.GetSize()
+	progress := driver.NewProgress(total, up)
+	chunk := func(size int64) io.Reader {
+		return driver.NewLimitedUploadStream(
+			ctx,
+			io.TeeReader(io.LimitReader(stream, size), progress),
+		)
+	}
+
+	firstSize := min(total, partSize)
+	sessionID, err := d.startUploadSession(ctx, chunk(firstSize), firstSize)
+	if err != nil {
+		return err
+	}
+	offset := firstSize
+
+	for total-offset > partSize {
+		if utils.IsCanceled(ctx) {
+			return ctx.Err()
+		}
+		if err := d.appendUploadSession(ctx, sessionID, offset, chunk(partSize), partSize); err != nil {
+			return err
+		}
+		offset += partSize
+	}
+
+	lastSize := total - offset
+	return d.finishUploadSession(ctx, path, offset, sessionID, chunk(lastSize), lastSize)
+}
+
+func checkContentResponse(res *http.Response) error {
+	defer res.Body.Close()
+	if res.StatusCode == http.StatusOK {
+		_, err := io.Copy(io.Discard, res.Body)
+		return err
+	}
+	body, err := io.ReadAll(io.LimitReader(res.Body, 1<<20))
+	if err != nil {
+		return err
+	}
+	return fmt.Errorf("dropbox content API returned %s: %s", res.Status, strings.TrimSpace(string(body)))
 }
 
 func (d *Dropbox) buildPathRootHeader() (string, error) {

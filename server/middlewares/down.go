@@ -15,10 +15,46 @@ import (
 	"github.com/pkg/errors"
 )
 
+const signedDownloadKey = "signed_download"
+
 func PathParse(c *gin.Context) {
 	rawPath := parsePath(c.Param("path"))
 	common.GinAppendValues(c, conf.PathKey, rawPath)
 	c.Next()
+}
+
+// DownloadAuth accepts either a normal authenticated request or a signed
+// download URL. Browser navigations cannot attach the Authorization header
+// stored by the frontend, so the path-bound signature acts as the credential
+// for that download only.
+func DownloadAuth(verifyFunc func(string, string) error) gin.HandlerFunc {
+	auth := Auth(false)
+	return func(c *gin.Context) {
+		rawPath, ok := c.Request.Context().Value(conf.PathKey).(string)
+		if !ok {
+			common.ErrorPage(c, errs.PermissionDenied, 401)
+			return
+		}
+		s := strings.TrimSuffix(c.Query("sign"), "/")
+		var signErr error
+		if s != "" {
+			signErr = verifyFunc(rawPath, s)
+			if signErr == nil {
+				c.Set(signedDownloadKey, true)
+				c.Next()
+				return
+			}
+		}
+		if c.GetHeader("Authorization") != "" {
+			auth(c)
+			return
+		}
+		if signErr != nil {
+			common.ErrorPage(c, signErr, 401)
+			return
+		}
+		common.ErrorPage(c, errs.PermissionDenied, 401)
+	}
 }
 
 func Down(verifyFunc func(string, string) error) func(c *gin.Context) {
@@ -47,6 +83,10 @@ func Down(verifyFunc func(string, string) error) func(c *gin.Context) {
 // UserPathAccess prevents authenticated users from bypassing their base path or
 // per-directory read restrictions by crafting a direct download URL.
 func UserPathAccess(c *gin.Context) {
+	if signed, ok := c.Get(signedDownloadKey); ok && signed == true {
+		c.Next()
+		return
+	}
 	user, ok := c.Request.Context().Value(conf.UserKey).(*model.User)
 	if !ok || user == nil {
 		common.ErrorPage(c, errs.PermissionDenied, 401)

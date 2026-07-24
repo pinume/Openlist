@@ -31,9 +31,13 @@ func TestNewOSSClientUsesEnvironmentHTTPSProxy(t *testing.T) {
 		t.Fatal("expected OSS client to use a custom HTTP client")
 	}
 
-	transport, ok := client.HTTPClient.Transport.(*http.Transport)
+	safe, ok := client.HTTPClient.Transport.(*safeTransport)
 	if !ok {
-		t.Fatalf("expected *http.Transport, got %T", client.HTTPClient.Transport)
+		t.Fatalf("expected *safeTransport, got %T", client.HTTPClient.Transport)
+	}
+	transport, ok := safe.base.(*http.Transport)
+	if !ok {
+		t.Fatalf("expected wrapped *http.Transport, got %T", safe.base)
 	}
 
 	if transport.Proxy == nil {

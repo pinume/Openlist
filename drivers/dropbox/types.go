@@ -61,27 +61,26 @@ type UploadAppendArgs struct {
 	Cursor UploadCursor `json:"cursor"`
 }
 
+type UploadCommit struct {
+	Autorename     bool   `json:"autorename"`
+	Mode           string `json:"mode"`
+	Mute           bool   `json:"mute"`
+	Path           string `json:"path"`
+	StrictConflict bool   `json:"strict_conflict"`
+}
+
 type UploadFinishArgs struct {
-	Commit struct {
-		Autorename     bool   `json:"autorename"`
-		Mode           string `json:"mode"`
-		Mute           bool   `json:"mute"`
-		Path           string `json:"path"`
-		StrictConflict bool   `json:"strict_conflict"`
-	} `json:"commit"`
+	Commit UploadCommit `json:"commit"`
 	Cursor UploadCursor `json:"cursor"`
 }
 
-func fileToObj(f File) *model.ObjThumb {
-	return &model.ObjThumb{
-		Object: model.Object{
-			ID:       f.ID,
-			Path:     f.PathDisplay,
-			Name:     f.Name,
-			Size:     int64(f.Size),
-			Modified: f.ServerModified,
-			IsFolder: f.Tag == "folder",
-		},
-		Thumbnail: model.Thumbnail{},
+func fileToObj(f File) *model.Object {
+	return &model.Object{
+		ID:       f.ID,
+		Path:     f.PathDisplay,
+		Name:     f.Name,
+		Size:     int64(f.Size),
+		Modified: f.ServerModified,
+		IsFolder: f.Tag == "folder",
 	}
 }

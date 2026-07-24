@@ -132,33 +132,6 @@ func InitialSettings() []model.SettingItem {
 		//{Key: conf.OfficeTypes, Value: "doc,docx,xls,xlsx,ppt,pptx", Type: conf.TypeText, Group: model.PREVIEW, Flag: model.PRIVATE},
 		{Key: conf.ProxyTypes, Value: "m3u8,url", Type: conf.TypeText, Group: model.PREVIEW, Flag: model.PRIVATE},
 		{Key: conf.ProxyIgnoreHeaders, Value: "authorization,referer", Type: conf.TypeText, Group: model.PREVIEW, Flag: model.PRIVATE},
-		{Key: "external_previews", Value: `{}`, Type: conf.TypeText, Group: model.PREVIEW},
-		{Key: "iframe_previews", Value: `{
-	"doc,docx,xls,xlsx,ppt,pptx": {
-		"Microsoft":"https://view.officeapps.live.com/op/view.aspx?src=$e_url",
-		"Google":"https://docs.google.com/gview?url=$e_url&embedded=true"
-	},
-	"pdf": {
-		"PDF.js":"https://res.oplist.org/pdf.js/web/viewer.html?file=$e_url"
-	},
-	"epub": {
-		"EPUB.js":"https://res.oplist.org/epub.js/viewer.html?url=$e_url"
-	}
-}`, Type: conf.TypeText, Group: model.PREVIEW},
-		//		{Key: conf.OfficeViewers, Value: `{
-		//	"Microsoft":"https://view.officeapps.live.com/op/view.aspx?src=$url",
-		//	"Google":"https://docs.google.com/gview?url=$url&embedded=true",
-		//}`, Type: conf.TypeText, Group: model.PREVIEW},
-		//		{Key: conf.PdfViewers, Value: `{
-		//	"pdf.js":"https://openlistteam.github.io/pdf.js/web/viewer.html?file=$url"
-		//}`, Type: conf.TypeText, Group: model.PREVIEW},
-		{Key: "audio_cover", Value: "", MigrationValue: defaultOpenListLogo, Type: conf.TypeString, Group: model.PREVIEW},
-		{Key: conf.AudioAutoplay, Value: "true", Type: conf.TypeBool, Group: model.PREVIEW},
-		{Key: conf.VideoAutoplay, Value: "true", Type: conf.TypeBool, Group: model.PREVIEW},
-		{Key: conf.PreviewDownloadByDefault, Value: "false", Type: conf.TypeBool, Group: model.PREVIEW},
-		{Key: conf.PreviewArchivesByDefault, Value: "true", Type: conf.TypeBool, Group: model.PREVIEW},
-		{Key: conf.ReadMeAutoRender, Value: "true", Type: conf.TypeBool, Group: model.PREVIEW},
-		{Key: conf.FilterReadMeScripts, Value: "true", Type: conf.TypeBool, Group: model.PREVIEW}, // frontend
 		{Key: conf.NonEFSZipEncoding, Value: "IBM437", Type: conf.TypeString, Group: model.PREVIEW},
 		// global settings
 		{Key: conf.HideFiles, Value: "/\\/README.md/i", Type: conf.TypeText, Group: model.GLOBAL},

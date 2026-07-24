@@ -28,8 +28,8 @@ func CopyWithCtx(ctx context.Context, out io.Writer, in io.Reader, size int64, p
 	// to copy by chunk (avoiding loading the whole file in memory).
 	// I insert the ability to cancel before read time as it is the earliest
 	// possible in the call process.
-	var finish int64 = 0
-	s := size / 100
+	var finish int64
+	lastProgress := 0
 	_, err := CopyWithBuffer(out, readerFunc(func(p []byte) (int, error) {
 		// golang non-blocking channel: https://gobyexample.com/non-blocking-channel-operations
 		select {
@@ -40,13 +40,20 @@ func CopyWithCtx(ctx context.Context, out io.Writer, in io.Reader, size int64, p
 		default:
 			// otherwise just run default io.Reader implementation
 			n, err := in.Read(p)
-			if s > 0 && (err == nil || err == io.EOF) {
+			if size > 0 && progress != nil && (err == nil || err == io.EOF) {
 				finish += int64(n)
-				progress(float64(finish) / float64(s))
+				percentage := min(int(float64(finish)/float64(size)*100), 100)
+				if percentage > lastProgress {
+					lastProgress = percentage
+					progress(float64(percentage))
+				}
 			}
 			return n, err
 		}
 	}))
+	if err == nil && progress != nil && lastProgress < 100 {
+		progress(100)
+	}
 	return err
 }
 

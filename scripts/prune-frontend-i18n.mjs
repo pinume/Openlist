@@ -23,7 +23,7 @@ const keepKeys = (object, keys) =>
     keys.filter((key) => key in object).map((key) => [key, object[key]]),
   )
 
-const driverNames = ["Local", "Dropbox", "S3"]
+const driverNames = ["Local", "Dropbox"]
 const drivers = await readJSON("drivers.json")
 const prunedDrivers = keepKeys(drivers, driverNames)
 prunedDrivers.config = keepKeys(drivers.config, driverNames)
@@ -34,6 +34,8 @@ const home = await readJSON("home.json")
 deleteKeys(home.toolbar, [
   "toggle_theme",
   "share",
+  "open_with",
+  "preview_page",
   "offline_download",
   "offline_download-tips",
   "offline_download_torrent",
@@ -42,6 +44,17 @@ deleteKeys(home.toolbar, [
   "send_aria2",
   "aria2_not_set",
   "send_aria2_success",
+])
+delete home.preview
+deleteKeys(home.local_settings, [
+  "show_folder_in_image_view",
+  "editor_font_size",
+  "editor_word_wrap",
+  "editor_word_wrap_options",
+  "editor_minimap",
+  "editor_minimap_options",
+  "show_gallery_thumbnails",
+  "show_gallery_thumbnails_options",
 ])
 deleteKeys(home.local_settings, [
   "aria2_rpc_url",
@@ -69,6 +82,9 @@ const settings = await readJSON("settings.json")
 for (const key of Object.keys(settings)) {
   if (
     /^(?:aria2|offline_download|qbittorrent|transmission|share_)/i.test(key) ||
+    /^(?:audio_cover|audio_autoplay|video_autoplay|external_previews|iframe_previews|preview_|readme_autorender|filter_readme_scripts)$/i.test(
+      key,
+    ) ||
     /^(?:115|123|pikpak|thunder).*temp_dir$/i.test(key) ||
     key === "123_open_callback_url"
   ) {

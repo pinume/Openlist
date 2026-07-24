@@ -1,0 +1,34 @@
+# Keep file navigation in the SPA and start downloads only from the explicit button.
+diff --git a/src/pages/home/file/File.tsx b/src/pages/home/file/File.tsx
+--- a/src/pages/home/file/File.tsx
++++ b/src/pages/home/file/File.tsx
+@@ -1,5 +1,4 @@
+ import { Button, Text, VStack } from "@hope-ui/solid"
+-import { onMount } from "solid-js"
+ import { useT } from "~/hooks"
+ import { objStore } from "~/store"
+ import { getFileSize } from "~/utils"
+@@ -7,14 +6,18 @@ import { getFileSize } from "~/utils"
+ const File = () => {
+   const t = useT()
+-  onMount(() => {
+-    window.location.assign(objStore.raw_url)
+-  })
+-
++  const startDownload = () => {
++    const url = new URL(objStore.raw_url, window.location.href)
++    url.searchParams.set("openlist_ts", Date.now().toString())
++    const anchor = document.createElement("a")
++    anchor.href = url.toString()
++    anchor.download = objStore.obj.name
++    anchor.click()
++  }
+   return (
+     <VStack w="$full" minH="20vh" justifyContent="center" spacing="$3">
+       <Text>{objStore.obj.name}</Text>
+       <Text color="$neutral10">{getFileSize(objStore.obj.size)}</Text>
+-      <Button as="a" href={objStore.raw_url}>
++      <Button onClick={startDownload}>
+         {t("home.toolbar.download")}
+       </Button>
+     </VStack>

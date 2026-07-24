@@ -29,8 +29,20 @@ if [[ ! -f public/dist/index.html ]]; then
   echo "Build the TinyList frontend and place its output in public/dist first." >&2
   exit 1
 fi
+if LC_ALL=C grep -Eqi -- \
+  "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
+  public/dist/assets/*.js; then
+  echo "public/dist still contains removed file preview code." >&2
+  echo "Run ./build-frontend-tinylist.sh before building TinyList." >&2
+  exit 1
+fi
+if [[ -d internal/fuse ]] ||
+  grep -Eq -- "github.com/(winfsp/cgofuse|rclone/rclone)" go.mod; then
+  echo "Removed FUSE/Crypt support is still present." >&2
+  exit 1
+fi
 
-go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox ./drivers/s3
+go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox
 
 mkdir -p "$(dirname "$output")"
 CGO_ENABLED=0 GOOS=linux GOARCH="$target_arch" \

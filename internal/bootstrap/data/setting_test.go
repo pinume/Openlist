@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/model"
 )
 
 func TestDefaultAnnouncementIsEmpty(t *testing.T) {
-	for _, item := range InitialSettings() {
+	for _, item := range initialSettingsForTest(t) {
 		if item.Key != conf.Announcement {
 			continue
 		}
@@ -23,7 +24,7 @@ func TestDefaultAnnouncementIsEmpty(t *testing.T) {
 }
 
 func TestDefaultSiteTitleIsTinyList(t *testing.T) {
-	for _, item := range InitialSettings() {
+	for _, item := range initialSettingsForTest(t) {
 		if item.Key != conf.SiteTitle {
 			continue
 		}
@@ -42,9 +43,8 @@ func TestDefaultBrandAssetsDoNotUseOpenListLogo(t *testing.T) {
 	want := map[string]string{
 		conf.Logo:    "favicon.ico",
 		conf.Favicon: "",
-		"audio_cover": "",
 	}
-	for _, item := range InitialSettings() {
+	for _, item := range initialSettingsForTest(t) {
 		value, ok := want[item.Key]
 		if !ok {
 			continue
@@ -60,4 +60,14 @@ func TestDefaultBrandAssetsDoNotUseOpenListLogo(t *testing.T) {
 	if len(want) != 0 {
 		t.Fatalf("brand settings not found: %v", want)
 	}
+}
+
+func initialSettingsForTest(t *testing.T) []model.SettingItem {
+	t.Helper()
+	oldConf := conf.Conf
+	conf.Conf = conf.DefaultConfig(t.TempDir())
+	t.Cleanup(func() {
+		conf.Conf = oldConf
+	})
+	return InitialSettings()
 }

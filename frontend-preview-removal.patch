@@ -1,0 +1,978 @@
+# Remove all frontend file preview and inline rendering entry points.
+diff --git a/src/app/theme.ts b/src/app/theme.ts
+index a46121c..6c775ff 100644
+--- a/src/app/theme.ts
++++ b/src/app/theme.ts
+@@ -176,14 +176,6 @@ export const globalStyles = globalCss({
+     flexWrap: "wrap",
+     rowGap: "0 !important",
+   },
+-  ".lightgallery-container": {
+-    "& .lg-backdrop": {
+-      zIndex: "$popover",
+-    },
+-    "& .lg-outer": {
+-      zIndex: "calc($popover + 10)",
+-    },
+-  },
+   ".viselect-selection-area": {
+     background: "rgba(46, 115, 252, 0.11)",
+     border: "2px solid rgba(98, 155, 255, 0.81)",
+diff --git a/src/components/index.ts b/src/components/index.ts
+index 8a097ab..4aec5ca 100644
+--- a/src/components/index.ts
++++ b/src/components/index.ts
+@@ -6,11 +6,9 @@ export * from "./MultiPathInput"
+ export * from "./Wether"
+ export * from "./LinkWithBase"
+ export * from "./ImageWithError"
+-export * from "./Markdown"
+ export * from "./ModalInput"
+ export * from "./ModalTwoInput"
+ export * from "./Base"
+ export * from "./Paginator"
+ export * from "./icons"
+-export * from "./EncodingSelect"
+ export * from "./SelectOptions"
+diff --git a/src/hooks/useLink.ts b/src/hooks/useLink.ts
+index 17ed24e..5eadd8f 100644
+--- a/src/hooks/useLink.ts
++++ b/src/hooks/useLink.ts
+@@ -11,7 +11,7 @@ import {
+ import { useRouter, useUtil } from "."
+ import { cookieStorage } from "@solid-primitives/storage"
+ 
+-type URLType = "preview" | "direct" | "proxy"
++type URLType = "page" | "direct" | "proxy"
+ 
+ // get download url by dir and obj
+ export const getLinkByDirAndObj = (
+@@ -21,7 +21,7 @@ export const getLinkByDirAndObj = (
+   isShare: boolean,
+   encodeAll?: boolean,
+ ) => {
+-  if (type !== "preview")
++  if (type !== "page")
+     dir = isShare
+       ? dir.substring(3) /* remove /@s */
+       : pathJoin(me().base_path, dir)
+@@ -31,7 +31,7 @@ export const getLinkByDirAndObj = (
+   path = encodePath(path, encodeAll)
+   let host = api
+   let prefix = isShare ? "/sd" : type === "direct" ? "/d" : "/p"
+-  if (type === "preview") {
++  if (type === "page") {
+     prefix = ""
+     if (!api.startsWith(location.origin + base_path))
+       host = location.origin + base_path
+@@ -47,10 +47,10 @@ export const getLinkByDirAndObj = (
+     return "?"
+   }
+   let ans = `${host}${prefix}${path}`
+-  if (type !== "preview" && !isShare && obj.sign) {
++  if (type !== "page" && !isShare && obj.sign) {
+     ans += `${QP()}sign=${obj.sign}`
+   }
+-  if (type !== "preview" && isShare) {
++  if (type !== "page" && isShare) {
+     const pwd = cookieStorage.getItem("browser-password") || ""
+     if (pwd) {
+       ans += `${QP()}pwd=${pwd}`
+@@ -88,8 +88,8 @@ export const useLink = () => {
+     proxyLink: (obj: Obj, encodeAll?: boolean) => {
+       return getLinkByObj(obj, "proxy", encodeAll)
+     },
+-    previewPage: (obj: Obj, encodeAll?: boolean) => {
+-      return getLinkByObj(obj, "preview", encodeAll)
++    pageLink: (obj: Obj, encodeAll?: boolean) => {
++      return getLinkByObj(obj, "page", encodeAll)
+     },
+     currentObjLink: (encodeAll?: boolean) => {
+       return rawLink(objStore.obj, encodeAll)
+@@ -98,7 +98,7 @@ export const useLink = () => {
+ }
+ 
+ export const useSelectedLink = () => {
+-  const { previewPage, rawLink: rawUrl } = useLink()
++  const { pageLink, rawLink: rawUrl } = useLink()
+   const rawLinks = (encodeAll?: boolean) => {
+     return selectedObjs()
+       .filter((obj) => !obj.is_dir)
+@@ -106,9 +106,9 @@ export const useSelectedLink = () => {
+   }
+   return {
+     rawLinks: rawLinks,
+-    previewPagesText: () => {
++    linksText: () => {
+       return selectedObjs()
+-        .map((obj) => previewPage(obj, true))
++        .map((obj) => (obj.is_dir ? pageLink(obj, true) : rawUrl(obj, true)))
+         .join("\n")
+     },
+     rawLinksText: (encodeAll?: boolean) => {
+@@ -119,11 +119,11 @@ export const useSelectedLink = () => {
+ 
+ export const useCopyLink = () => {
+   const { copy } = useUtil()
+-  const { previewPagesText, rawLinksText } = useSelectedLink()
++  const { linksText, rawLinksText } = useSelectedLink()
+   const { currentObjLink } = useLink()
+   return {
+-    copySelectedPreviewPage: () => {
+-      copy(previewPagesText())
++    copySelectedLink: () => {
++      copy(linksText())
+     },
+     copySelectedRawLink: (encodeAll?: boolean) => {
+       copy(rawLinksText(encodeAll))
+diff --git a/src/pages/home/Body.tsx b/src/pages/home/Body.tsx
+index a8d032d..c3cdfaf 100644
+--- a/src/pages/home/Body.tsx
++++ b/src/pages/home/Body.tsx
+@@ -1,7 +1,6 @@
+ import { VStack } from "@hope-ui/solid"
+ import { Nav } from "./Nav"
+ import { Obj } from "./Obj"
+-import { Readme } from "./Readme"
+ import { Container } from "./Container"
+ import { Sidebar } from "./Sidebar"
+ 
+@@ -17,13 +16,8 @@ export const Body = () => {
+         w="$full"
+         gap="$4"
+       >
+-        <Readme files={["header.md", "top.md", "index.md"]} fromMeta="header" />
+         <Nav />
+         <Obj />
+-        <Readme
+-          files={["readme.md", "footer.md", "bottom.md"]}
+-          fromMeta="readme"
+-        />
+         <Sidebar />
+       </VStack>
+     </Container>
+diff --git a/src/pages/home/Layout.tsx b/src/pages/home/Layout.tsx
+index 4d8904f..f7ea4a5 100644
+--- a/src/pages/home/Layout.tsx
++++ b/src/pages/home/Layout.tsx
+@@ -1,4 +1,3 @@
+-import { Markdown } from "~/components"
+ import { useTitle } from "~/hooks"
+ import { getSetting } from "~/store"
+ import { notify } from "~/utils"
+@@ -10,7 +9,7 @@ const Index = () => {
+   useTitle(getSetting("site_title"))
+   const announcement = getSetting("announcement")
+   if (announcement) {
+-    notify.render(<Markdown children={announcement} />)
++    notify.info(announcement)
+   }
+   return (
+     <>
+diff --git a/src/pages/home/file/File.tsx b/src/pages/home/file/File.tsx
+index 83f5780..95cbb13 100644
+--- a/src/pages/home/file/File.tsx
++++ b/src/pages/home/file/File.tsx
+@@ -1,50 +1,23 @@
+-import { HStack, VStack } from "@hope-ui/solid"
+-import { createMemo, ErrorBoundary, Show, Suspense } from "solid-js"
+-import { Dynamic } from "solid-js/web"
+-import { Error, FullLoading, SelectWrapper } from "~/components"
++import { Button, Text, VStack } from "@hope-ui/solid"
++import { onMount } from "solid-js"
++import { useT } from "~/hooks"
+ import { objStore } from "~/store"
+-import { useRouter } from "~/hooks"
+-import { Download } from "../previews/download"
+-import { OpenWith } from "./open-with"
+-import { getPreviews } from "../previews"
++import { getFileSize } from "~/utils"
+ 
+ const File = () => {
+-  const { searchParams, setSearchParams } = useRouter()
+-  const previews = getPreviews({ ...objStore.obj, provider: objStore.provider })
+-  const cur = createMemo(() => {
+-    if (!previews.length) return undefined
+-    const selected = searchParams["preview"]
+-    if (selected) {
+-      const found = previews.find((item) => item.key === selected)
+-      if (found) return found
+-    }
+-    return previews[0]
++  const t = useT()
++  onMount(() => {
++    window.location.assign(objStore.raw_url)
+   })
+ 
+   return (
+-    <Show when={previews.length > 1} fallback={<Download openWith />}>
+-      <VStack w="$full" spacing="$2">
+-        <HStack w="$full" spacing="$2">
+-          <SelectWrapper
+-            alwaysShowBorder
+-            value={cur()?.key || ""}
+-            onChange={(key) => {
+-              setSearchParams({ preview: key }, { replace: true })
+-            }}
+-            options={previews.map((item) => ({
+-              value: item.key,
+-              label: item.name,
+-            }))}
+-          />
+-          <OpenWith />
+-        </HStack>
+-        <ErrorBoundary fallback={(err) => <Error msg={String(err)} />}>
+-          <Suspense fallback={<FullLoading />}>
+-            <Dynamic component={cur()?.component} />
+-          </Suspense>
+-        </ErrorBoundary>
+-      </VStack>
+-    </Show>
++    <VStack w="$full" minH="20vh" justifyContent="center" spacing="$3">
++      <Text>{objStore.obj.name}</Text>
++      <Text color="$neutral10">{getFileSize(objStore.obj.size)}</Text>
++      <Button as="a" href={objStore.raw_url}>
++        {t("home.toolbar.download")}
++      </Button>
++    </VStack>
+   )
+ }
+ 
+diff --git a/src/pages/home/folder/Folder.tsx b/src/pages/home/folder/Folder.tsx
+index ce15e4c..b1b8d50 100644
+--- a/src/pages/home/folder/Folder.tsx
++++ b/src/pages/home/folder/Folder.tsx
+@@ -1,73 +1,13 @@
+-import {
+-  lazy,
+-  createEffect,
+-  createMemo,
+-  onCleanup,
+-  Switch,
+-  Match,
+-  on,
+-} from "solid-js"
++import { lazy, Switch, Match } from "solid-js"
+ import { layout } from "~/store"
+ import { ContextMenu } from "./context-menu"
+ import { Pager } from "./Pager"
+-import { useLink, useT } from "~/hooks"
+-import { objStore, local } from "~/store"
+-import { ObjType } from "~/types"
+-import { bus } from "~/utils"
+-import lightGallery from "lightgallery"
+-import lgThumbnail from "lightgallery/plugins/thumbnail"
+-import lgZoom from "lightgallery/plugins/zoom"
+-import lgRotate from "lightgallery/plugins/rotate"
+-import lgAutoplay from "lightgallery/plugins/autoplay"
+-import lgFullscreen from "lightgallery/plugins/fullscreen"
+-import "lightgallery/css/lightgallery-bundle.css"
+-import { LightGallery } from "lightgallery/lightgallery"
+ import { Search } from "./Search"
+ 
+ const ListLayout = lazy(() => import("./List"))
+ const GridLayout = lazy(() => import("./Grid"))
+-const ImageLayout = lazy(() => import("./Images"))
+ 
+ const Folder = () => {
+-  const { rawLink } = useLink()
+-  const images = createMemo(() =>
+-    objStore.objs.filter((obj) => obj.type === ObjType.IMAGE),
+-  )
+-
+-  let dynamicGallery: LightGallery | undefined
+-  const initGallery = () => {
+-    dynamicGallery = lightGallery(document.createElement("div"), {
+-      addClass: "lightgallery-container",
+-      dynamic: true,
+-      thumbnail: local["show_gallery_thumbnails"] === "visible",
+-      plugins: [lgZoom, lgThumbnail, lgRotate, lgAutoplay, lgFullscreen],
+-      dynamicEl: images().map((obj) => {
+-        const raw = rawLink(obj, true)
+-        return {
+-          src: raw,
+-          thumb: obj.thumb === "" ? raw : obj.thumb,
+-          subHtml: `<h4>${obj.name}</h4>`,
+-        }
+-      }),
+-    })
+-  }
+-  createEffect(
+-    on([images, () => local["show_gallery_thumbnails"]], () => {
+-      dynamicGallery?.destroy()
+-      dynamicGallery = undefined
+-    }),
+-  )
+-  bus.on("gallery", (name) => {
+-    if (!dynamicGallery) {
+-      initGallery()
+-    }
+-    dynamicGallery?.openGallery(images().findIndex((obj) => obj.name === name))
+-  })
+-  onCleanup(() => {
+-    bus.off("gallery")
+-    dynamicGallery?.destroy()
+-  })
+-  const t = useT()
+   return (
+     <>
+       <Switch>
+@@ -77,9 +17,6 @@ const Folder = () => {
+         <Match when={layout() === "grid"}>
+           <GridLayout />
+         </Match>
+-        <Match when={layout() === "image"}>
+-          <ImageLayout images={images()} />
+-        </Match>
+       </Switch>
+       <Pager />
+       <Search />
+diff --git a/src/pages/home/folder/Grid.tsx b/src/pages/home/folder/Grid.tsx
+index 32045d4..abdd214 100644
+--- a/src/pages/home/folder/Grid.tsx
++++ b/src/pages/home/folder/Grid.tsx
+@@ -1,7 +1,6 @@
+ import { Box, Grid, Text } from "@hope-ui/solid"
+ import { For, Show } from "solid-js"
+ import { GridItem } from "./GridItem"
+-import "lightgallery/css/lightgallery-bundle.css"
+ import { smartCountMsg, local, objStore } from "~/store"
+ import { useSelectWithMouse } from "./helper"
+ 
+diff --git a/src/pages/home/folder/GridItem.tsx b/src/pages/home/folder/GridItem.tsx
+index abaa550..e6c1a89 100644
+--- a/src/pages/home/folder/GridItem.tsx
++++ b/src/pages/home/folder/GridItem.tsx
+@@ -2,11 +2,11 @@ import { Center, VStack, Icon, Text } from "@hope-ui/solid"
+ import { Motion } from "solid-motionone"
+ import { useContextMenu } from "solid-contextmenu"
+ import { batch, Show } from "solid-js"
+-import { CenterLoading, LinkWithPush, ImageWithError } from "~/components"
++import { LinkWithPush } from "~/components"
+ import { usePath, useRouter, useUtil } from "~/hooks"
+ import { checkboxOpen, getMainColor, local, selectIndex } from "~/store"
+-import { ObjType, StoreObj } from "~/types"
+-import { bus, hoverColor } from "~/utils"
++import { StoreObj } from "~/types"
++import { hoverColor } from "~/utils"
+ import { getIconByObj } from "~/utils/icon"
+ import { ItemCheckbox, useSelectWithMouse } from "./helper"
+ 
+@@ -86,15 +86,6 @@ export const GridItem = (props: { obj: StoreObj; index: number }) => {
+           class="item-thumbnail"
+           h={`${parseInt(local["grid_item_size"])}px`}
+           w="$full"
+-          cursor={props.obj.type !== ObjType.IMAGE ? "inherit" : "pointer"}
+-          on:click={(e: MouseEvent) => {
+-            if (props.obj.type !== ObjType.IMAGE) return
+-            if (e.ctrlKey || e.metaKey || e.shiftKey) return
+-            if (!restoreSelectionCache()) return
+-            bus.emit("gallery", props.obj.name)
+-            e.preventDefault()
+-            e.stopPropagation()
+-          }}
+           pos="relative"
+         >
+           <Show when={checkboxOpen()}>
+@@ -115,18 +106,7 @@ export const GridItem = (props: { obj: StoreObj; index: number }) => {
+               }}
+             />
+           </Show>
+-          <Show when={props.obj.thumb} fallback={objIcon}>
+-            <ImageWithError
+-              maxH="$full"
+-              maxW="$full"
+-              rounded="$lg"
+-              shadow="$md"
+-              fallback={<CenterLoading size="lg" />}
+-              fallbackErr={objIcon}
+-              src={props.obj.thumb}
+-              loading="lazy"
+-            />
+-          </Show>
++          {objIcon}
+         </Center>
+         <Text
+           css={{
+diff --git a/src/pages/home/folder/ListItem.tsx b/src/pages/home/folder/ListItem.tsx
+index 4893a59..f88b212 100644
+--- a/src/pages/home/folder/ListItem.tsx
++++ b/src/pages/home/folder/ListItem.tsx
+@@ -19,9 +19,8 @@ import {
+   OrderBy,
+   selectIndex,
+ } from "~/store"
+-import { MountDetails, ObjType, StoreObj } from "~/types"
++import { StoreObj } from "~/types"
+ import {
+-  bus,
+   formatDate,
+   getFileSize,
+   hoverColor,
+@@ -132,15 +131,6 @@ export const ListItem = (props: { obj: StoreObj; index: number }) => {
+             color={getMainColor()}
+             as={getIconByObj(props.obj)}
+             mr="$1"
+-            cursor={props.obj.type !== ObjType.IMAGE ? "inherit" : "pointer"}
+-            on:click={(e: MouseEvent) => {
+-              if (props.obj.type !== ObjType.IMAGE) return
+-              if (e.ctrlKey || e.metaKey || e.shiftKey) return
+-              if (!restoreSelectionCache()) return
+-              bus.emit("gallery", props.obj.name)
+-              e.preventDefault()
+-              e.stopPropagation()
+-            }}
+           />
+           <Text
+             class="name"
+diff --git a/src/pages/home/folder/context-menu.tsx b/src/pages/home/folder/context-menu.tsx
+index 6b02206..69908d8 100644
+--- a/src/pages/home/folder/context-menu.tsx
++++ b/src/pages/home/folder/context-menu.tsx
+@@ -1,11 +1,11 @@
+ import { Menu, Item, Submenu } from "solid-contextmenu"
+-import { useCopyLink, useDownload, useLink, useRouter, useT } from "~/hooks"
++import { useCopyLink, useDownload, useRouter, useT } from "~/hooks"
+ import "solid-contextmenu/dist/style.css"
+-import { HStack, Icon, Text, useColorMode, Image } from "@hope-ui/solid"
++import { HStack, Icon, Text, useColorMode } from "@hope-ui/solid"
+ import { operations } from "../toolbar/operations"
+-import { createMemo, For, Show } from "solid-js"
+-import { bus, convertURL, notify } from "~/utils"
+-import { ObjType, UserMethods } from "~/types"
++import { For, Show } from "solid-js"
++import { bus, notify } from "~/utils"
++import { UserMethods } from "~/types"
+ import {
+   getSettingBool,
+   haveSelected,
+@@ -15,9 +15,6 @@ import {
+   selectedObjs,
+   userCan,
+ } from "~/store"
+-import { players } from "../previews/video_box"
+-import { getPreviews } from "../previews"
+-import { BsPlayCircleFill } from "solid-icons/bs"
+ import { isArchive } from "~/store/archive"
+ 
+ const ItemContent = (props: { name: string }) => {
+@@ -38,21 +35,12 @@ const ItemContent = (props: { name: string }) => {
+ export const ContextMenu = () => {
+   const t = useT()
+   const { colorMode } = useColorMode()
+-  const { copySelectedRawLink, copySelectedPreviewPage } = useCopyLink()
++  const { copySelectedLink } = useCopyLink()
+   const { batchDownloadSelected, playlistDownloadSelected } = useDownload()
+   const canPackageDownload = () => {
+     return UserMethods.is_admin(me()) || getSettingBool("package_download")
+   }
+-  const { rawLink } = useLink()
+-  const { isShare, pushHref, to } = useRouter()
+-  const openWithPreviews = createMemo(() => {
+-    const objs = selectedObjs()
+-    if (objs.length !== 1) return []
+-    const obj = objs[0]
+-    if (obj.is_dir) return []
+-    return getPreviews({ ...obj, provider: objStore.provider })
+-    // .filter((p) => p.key !== "download")
+-  })
++  const { isShare } = useRouter()
+   return (
+     <Menu
+       id={1}
+@@ -60,21 +48,6 @@ export const ContextMenu = () => {
+       theme={colorMode() !== "dark" ? "light" : "dark"}
+       style="z-index: var(--hope-zIndices-popover)"
+     >
+-      <Show when={openWithPreviews().length > 0}>
+-        <Submenu label={<ItemContent name="open_with" />}>
+-          <For each={openWithPreviews()}>
+-            {(preview) => (
+-              <Item
+-                onClick={({ props }) => {
+-                  to(`${pushHref(props.name)}?preview=${preview.key}`)
+-                }}
+-              >
+-                {preview.name}
+-              </Item>
+-            )}
+-          </For>
+-        </Submenu>
+-      </Show>
+       <For each={["rename", "move", "copy", "delete"] as const}>
+         {(name) => (
+           <Item
+@@ -104,15 +77,7 @@ export const ContextMenu = () => {
+         <ItemContent name="decompress" />
+       </Item>
+       <Show when={oneChecked()}>
+-        <Item
+-          onClick={({ props }) => {
+-            if (props.is_dir) {
+-              copySelectedPreviewPage()
+-            } else {
+-              copySelectedRawLink(true)
+-            }
+-          }}
+-        >
++        <Item onClick={copySelectedLink}>
+           <ItemContent name="copy_link" />
+         </Item>
+         <Item
+@@ -130,59 +95,11 @@ export const ContextMenu = () => {
+         >
+           <ItemContent name="download" />
+         </Item>
+-        <Submenu
+-          hidden={({ props }) => {
+-            return props.type !== ObjType.VIDEO
+-          }}
+-          label={
+-            <HStack spacing="$2">
+-              <Icon
+-                as={BsPlayCircleFill}
+-                boxSize="$7"
+-                p="$0_5"
+-                color="$info9"
+-              />
+-              <Text>{t("home.preview.play_with")}</Text>
+-            </HStack>
+-          }
+-        >
+-          <For each={players}>
+-            {(player) => (
+-              <Item
+-                onClick={({ props }) => {
+-                  const href = convertURL(player.scheme, {
+-                    raw_url: "",
+-                    name: props.name,
+-                    d_url: rawLink(props, true),
+-                  })
+-                  window.open(href, "_self")
+-                }}
+-              >
+-                <HStack spacing="$2">
+-                  <Image
+-                    m="0 auto"
+-                    boxSize="$7"
+-                    src={`${window.__dynamic_base__}/images/${player.icon}.webp`}
+-                  />
+-                  <Text>{player.name}</Text>
+-                </HStack>
+-              </Item>
+-            )}
+-          </For>
+-        </Submenu>
+       </Show>
+       <Show when={!oneChecked() && haveSelected()}>
+-        <Submenu label={<ItemContent name="copy_link" />}>
+-          <Item onClick={copySelectedPreviewPage}>
+-            {t("home.toolbar.preview_page")}
+-          </Item>
+-          <Item onClick={() => copySelectedRawLink()}>
+-            {t("home.toolbar.down_link")}
+-          </Item>
+-          <Item onClick={() => copySelectedRawLink(true)}>
+-            {t("home.toolbar.encode_down_link")}
+-          </Item>
+-        </Submenu>
++        <Item onClick={copySelectedLink}>
++          <ItemContent name="copy_link" />
++        </Item>
+         <Submenu label={<ItemContent name="download" />}>
+           <Item onClick={batchDownloadSelected}>
+             {t("home.toolbar.batch_download")}
+diff --git a/src/pages/home/header/layout.tsx b/src/pages/home/header/layout.tsx
+index 9dc6cdf..c57d2b3 100644
+--- a/src/pages/home/header/layout.tsx
++++ b/src/pages/home/header/layout.tsx
+@@ -6,7 +6,7 @@ import {
+   MenuTrigger,
+ } from "@hope-ui/solid"
+ import { changeColor } from "seemly"
+-import { BsGridFill, BsCardImage } from "solid-icons/bs"
++import { BsGridFill } from "solid-icons/bs"
+ import { FaSolidListUl } from "solid-icons/fa"
+ import { Switch, Match, For } from "solid-js"
+ import { Dynamic } from "solid-js/web"
+@@ -16,7 +16,6 @@ import { getMainColor, LayoutType, layout, setLayout } from "~/store"
+ const layouts = {
+   list: FaSolidListUl,
+   grid: BsGridFill,
+-  image: BsCardImage,
+ } as const
+ 
+ export const Layout = () => {
+@@ -41,9 +40,6 @@ export const Layout = () => {
+             <Match when={layout() === "grid"}>
+               <BsGridFill />
+             </Match>
+-            <Match when={layout() === "image"}>
+-              <BsCardImage />
+-            </Match>
+           </Switch>
+         }
+       ></MenuTrigger>
+diff --git a/src/pages/home/toolbar/CopyLink.tsx b/src/pages/home/toolbar/CopyLink.tsx
+index 2a47eba..e6e6a9d 100644
+--- a/src/pages/home/toolbar/CopyLink.tsx
++++ b/src/pages/home/toolbar/CopyLink.tsx
+@@ -1,40 +1,7 @@
+-import { Menu, MenuTrigger, MenuContent, MenuItem } from "@hope-ui/solid"
+-import { useT, useCopyLink } from "~/hooks"
++import { useCopyLink } from "~/hooks"
+ import { CenterIcon } from "./Icon"
+ 
+ export const CopyLink = () => {
+-  const t = useT()
+-  const { copySelectedPreviewPage, copySelectedRawLink } = useCopyLink()
+-  const colorScheme = "neutral"
+-  return (
+-    <Menu placement="top" offset={10}>
+-      <MenuTrigger as={CenterIcon} name="copy_link" />
+-      <MenuContent>
+-        <MenuItem
+-          colorScheme={colorScheme}
+-          onSelect={() => {
+-            copySelectedPreviewPage()
+-          }}
+-        >
+-          {t("home.toolbar.preview_page")}
+-        </MenuItem>
+-        <MenuItem
+-          colorScheme={colorScheme}
+-          onSelect={() => {
+-            copySelectedRawLink()
+-          }}
+-        >
+-          {t("home.toolbar.down_link")}
+-        </MenuItem>
+-        <MenuItem
+-          colorScheme={colorScheme}
+-          onSelect={() => {
+-            copySelectedRawLink(true)
+-          }}
+-        >
+-          {t("home.toolbar.encode_down_link")}
+-        </MenuItem>
+-      </MenuContent>
+-    </Menu>
+-  )
++  const { copySelectedLink } = useCopyLink()
++  return <CenterIcon name="copy_link" onClick={copySelectedLink} />
+ }
+diff --git a/src/pages/home/toolbar/Right.tsx b/src/pages/home/toolbar/Right.tsx
+index 7d1a32c..efe9814 100644
+--- a/src/pages/home/toolbar/Right.tsx
++++ b/src/pages/home/toolbar/Right.tsx
+@@ -10,8 +10,6 @@ import { AiOutlineCloudUpload, AiOutlineSetting } from "solid-icons/ai"
+ import { RiSystemRefreshLine } from "solid-icons/ri"
+ import { usePath, useRouter } from "~/hooks"
+ import { Motion } from "solid-motionone"
+-import { isTocVisible, setTocDisabled } from "~/components"
+-import { BiSolidBookContent } from "solid-icons/bi"
+ 
+ export const Right = () => {
+   const { isOpen, onToggle } = createDisclosure({
+@@ -146,15 +144,6 @@ export const Right = () => {
+                 }}
+               />
+             </Show>
+-            <Show when={isTocVisible()}>
+-              <RightIcon
+-                as={BiSolidBookContent}
+-                tips="toggle_markdown_toc"
+-                onClick={() => {
+-                  setTocDisabled((disabled) => !disabled)
+-                }}
+-              />
+-            </Show>
+             <RightIcon
+               tips="toggle_checkbox"
+               as={TbCheckbox}
+diff --git a/src/pages/home/toolbar/operations.ts b/src/pages/home/toolbar/operations.ts
+index 047208e..e803aa0 100644
+--- a/src/pages/home/toolbar/operations.ts
++++ b/src/pages/home/toolbar/operations.ts
+@@ -8,7 +8,6 @@ import { CgFileAdd, CgFolderAdd, CgFolderRemove } from "solid-icons/cg"
+ import { AiOutlineCloudDownload } from "solid-icons/ai"
+ import { ImMoveUp } from "solid-icons/im"
+ import { BiRegularRename } from "solid-icons/bi"
+-import { FiExternalLink } from "solid-icons/fi"
+ 
+ export interface Operations {
+   [key: string]: {
+@@ -18,7 +17,6 @@ export interface Operations {
+   }
+ }
+ export const operations: Operations = {
+-  open_with: { icon: FiExternalLink, color: "$info9" },
+   rename: { icon: CgRename, color: "$accent9" },
+   copy: { icon: TbCopy, color: "$success9" },
+   move: { icon: TbFileArrowRight, color: "$warning9" },
+diff --git a/src/store/local_settings.ts b/src/store/local_settings.ts
+index ea17806..cc3e5db 100644
+--- a/src/store/local_settings.ts
++++ b/src/store/local_settings.ts
+@@ -14,13 +14,7 @@ export const initialLocalSettings = [
+     key: "global_default_layout",
+     default: "list",
+     type: "select",
+-    options: ["list", "grid", "image"],
+-  },
+-  {
+-    key: "show_folder_in_image_view",
+-    default: "top",
+-    type: "select",
+-    options: ["top", "bottom", "none"],
++    options: ["list", "grid"],
+   },
+   {
+     key: "show_sidebar",
+@@ -58,29 +52,6 @@ export const initialLocalSettings = [
+     options: ["direct", "dblclick", "disable_while_checked"],
+     hidden: false,
+   },
+-  {
+-    key: "editor_font_size",
+-    default: "14",
+-    type: "number",
+-  },
+-  {
+-    key: "editor_word_wrap",
+-    default: "false",
+-    type: "select",
+-    options: ["false", "true"],
+-  },
+-  {
+-    key: "editor_minimap",
+-    default: "true",
+-    type: "select",
+-    options: ["false", "true"],
+-  },
+-  {
+-    key: "show_gallery_thumbnails",
+-    default: "visible",
+-    type: "select",
+-    options: ["none", "visible"],
+-  },
+ ]
+ export type LocalSetting = (typeof initialLocalSettings)[number]
+ for (const setting of initialLocalSettings) {
+diff --git a/src/store/obj.ts b/src/store/obj.ts
+index da29682..e2268dd 100644
+--- a/src/store/obj.ts
++++ b/src/store/obj.ts
+@@ -184,7 +184,7 @@ export const isIndeterminate = () => {
+ 
+ const selectedNum = createMemo(() => selectedObjs().length)
+ 
+-export type LayoutType = "list" | "grid" | "image"
++export type LayoutType = "list" | "grid"
+ const [pathname, setPathname] = createSignal<string>(location.pathname)
+ const layoutRecord: Record<string, LayoutType> = (() => {
+   try {
+@@ -196,11 +196,18 @@ const layoutRecord: Record<string, LayoutType> = (() => {
+ 
+ bus.on("pathname", (p) => setPathname(p))
+ const [_layout, _setLayout] = createSignal<LayoutType>(
+-  layoutRecord[pathname()] || local["global_default_layout"],
++  layoutRecord[pathname()] === "grid" ||
++    local["global_default_layout"] === "grid"
++    ? "grid"
++    : "list",
+ )
+ export const layout = () => {
+   const layout = layoutRecord[pathname()]
+-  _setLayout(layout || local["global_default_layout"])
++  _setLayout(
++    layout === "grid" || local["global_default_layout"] === "grid"
++      ? "grid"
++      : "list",
++  )
+   return _layout()
+ }
+ export const setLayout = (layout: LayoutType) => {
+diff --git a/src/store/settings.ts b/src/store/settings.ts
+index 5cb9edb..5d51820 100644
+--- a/src/store/settings.ts
++++ b/src/store/settings.ts
+@@ -1,5 +1,3 @@
+-import { ext, recordToArray, strToRegExp } from "~/utils"
+-
+ const settings: Record<string, string> = {}
+ 
+ export const setSettings = (items: Record<string, string>) => {
+@@ -34,53 +32,6 @@ export const getMainColor = (): string => {
+   return getSetting("main_color") || "#1890ff"
+ }
+ 
+-/**
+- * like this:
+-{
+-  "ppt,pptx":{
+-    "example1":"https://example1.com/ppt?url=$url",
+-    "example2":"https://example2.com/ppt?url=$url"
+-  }
+-}
+- */
+-
+-type Previews = Record<string, Record<string, string>>
+-let previewsRecord: Record<string, Previews> = {}
+-type PreviewsType = "external_previews" | "iframe_previews"
+-
+-const getPreviews = (type: PreviewsType): Previews => {
+-  if (!previewsRecord[type]) {
+-    try {
+-      previewsRecord[type] = JSON.parse(getSetting(type))
+-    } catch (e) {
+-      console.error(`failed parse ${type}, use default`, e)
+-      previewsRecord[type] = {}
+-    }
+-  }
+-  return previewsRecord[type]
+-}
+-
+-const getPreviewsByName = (name: string, type: PreviewsType) => {
+-  const extension = ext(name).toLowerCase()
+-  const res: { key: string; value: string }[] = []
+-  for (const key in getPreviews(type)) {
+-    if (key.startsWith("/")) {
+-      const reg = strToRegExp(key)
+-      if (reg.test(extension)) {
+-        res.push(...recordToArray(getPreviews(type)[key]))
+-      }
+-    } else if (key.split(",").includes(extension)) {
+-      res.push(...recordToArray(getPreviews(type)[key]))
+-    }
+-  }
+-  return res
+-}
+-
+-export const getExternalPreviews = (name: string) =>
+-  getPreviewsByName(name, "external_previews")
+-export const getIframePreviews = (name: string) =>
+-  getPreviewsByName(name, "iframe_previews")
+-
+ export const getPagination = (): {
+   size: number
+   type: "all" | "pagination" | "load_more" | "auto_load_more"
+diff --git a/src/utils/str.ts b/src/utils/str.ts
+index 1a8fc5d..8b4f1fb 100644
+--- a/src/utils/str.ts
++++ b/src/utils/str.ts
+@@ -1,5 +1,3 @@
+-import Handlebars from "handlebars"
+-
+ export const firstUpperCase = (str: string) => {
+   if (!str || str.length === 0) {
+     return ""
+@@ -51,61 +49,6 @@ export function formatDate(dateStr: string) {
+   )
+ }
+ 
+-export type ConvertURLArgs = {
+-  raw_url: string
+-  name: string
+-  d_url: string
+-  ts?: boolean
+-}
+-
+-export const convertURL = (scheme: string, args: ConvertURLArgs) => {
+-  let ans = scheme
+-  ans = ans.replace("$name", args.name)
+-  if (args.ts) {
+-    const d = new URL(args.d_url)
+-    const ts = Date.now()
+-    d.searchParams.set("openlist_ts", ts.toString())
+-    args.d_url = d.toString()
+-  }
+-  ans = ans.replace(/\$[eb_]*url/, (old) => {
+-    const op = old.match(/[eb]/g)
+-    let u = args.raw_url
+-    if (op) {
+-      for (const o of op.reverse()) {
+-        if (o === "e") {
+-          u = encodeURIComponent(u)
+-        } else if (o === "b") {
+-          u = window.btoa(u)
+-        }
+-      }
+-    }
+-    return u
+-  })
+-  ans = ans.replace(/\$[eb_]*durl/, (old) => {
+-    const op = old.match(/[eb]/g)
+-    let u = args.d_url
+-    if (op) {
+-      for (const o of op.reverse()) {
+-        if (o === "e") {
+-          u = encodeURIComponent(u)
+-        } else if (o === "b") {
+-          u = window.btoa(u)
+-        }
+-      }
+-    }
+-    return u
+-  })
+-  return ans
+-}
+-
+-export const strToRegExp = (str: string) => {
+-  str = str.trim()
+-  let pattern = str.replace(/^\/(.*)\/([a-z]*)$/, "$1")
+-  let args = str.replace(/^\/(.*)\/([a-z]*)$/, "$2")
+-  const reg = new RegExp(pattern, args)
+-  return reg
+-}
+-
+ const ENC = {
+   "+": "-",
+   "/": "_",
+@@ -137,46 +80,6 @@ export const decodeText = (data: BufferSource, encoding?: string) => {
+ //   return data
+ // }
+ 
+-Handlebars.registerHelper("dateLocaleString", (date: Date) => {
+-  return new Date(date).toLocaleString()
+-})
+-
+-Handlebars.registerHelper("add", (a: any, b: any) => {
+-  return a + b
+-})
+-
+-Handlebars.registerHelper("eq", (a: any, b: any) => {
+-  return a === b
+-})
+-
+-Handlebars.registerHelper("less", (a: any, b: any) => {
+-  return a < b
+-})
+-
+-Handlebars.registerHelper("and", (a: boolean, b: boolean) => {
+-  return a && b
+-})
+-
+-Handlebars.registerHelper("or", (a: boolean, b: boolean) => {
+-  return a || b
+-})
+-
+-Handlebars.registerHelper("not", (v: boolean) => {
+-  return !v
+-})
+-
+-Handlebars.registerHelper("filename", (path: string) => {
+-  return path.indexOf("/") === -1 ? path : path.slice(path.lastIndexOf("/") + 1)
+-})
+-
+-export const matchTemplate = (
+-  templateStr: string,
+-  data: { [key: string]: any },
+-) => {
+-  const template = Handlebars.compile(templateStr)
+-  return template(data)
+-}
+-
+ export const validateFilename = (
+   name: string,
+ ): { valid: boolean; error?: string } => {

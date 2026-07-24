@@ -13,13 +13,21 @@ type UpdateProgress = model.UpdateProgress
 type Progress struct {
 	Total int64
 	Done  int64
+	last  int
 	up    UpdateProgress
 }
 
 func (p *Progress) Write(b []byte) (n int, err error) {
 	n = len(b)
 	p.Done += int64(n)
-	p.up(float64(p.Done) / float64(p.Total) * 100)
+	if p.Total <= 0 || p.up == nil {
+		return n, nil
+	}
+	percentage := min(int(float64(p.Done)/float64(p.Total)*100), 100)
+	if percentage > p.last {
+		p.last = percentage
+		p.up(float64(percentage))
+	}
 	return n, err
 }
 
