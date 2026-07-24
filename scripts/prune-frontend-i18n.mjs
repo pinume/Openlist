@@ -32,6 +32,7 @@ await writeJSON("drivers.json", prunedDrivers)
 
 const home = await readJSON("home.json")
 deleteKeys(home.toolbar, [
+  "toggle_theme",
   "share",
   "offline_download",
   "offline_download-tips",
@@ -47,6 +48,7 @@ deleteKeys(home.local_settings, [
   "aria2_rpc_secret",
   "aria2_dir",
 ])
+home.footer.powered_by = "由 TinyList 驱动"
 await writeJSON("home.json", home)
 
 const login = await readJSON("login.json")
@@ -54,6 +56,7 @@ login.title = "登录到 TinyList"
 await writeJSON("login.json", login)
 
 const manage = await readJSON("manage.json")
+manage.title = "TinyList 管理"
 manage.sidemenu = keepKeys(manage.sidemenu, [
   "profile",
   "users",

@@ -29,6 +29,7 @@ git -C "$work_root/frontend" apply "$repo_root/frontend-personal.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-chinese-ui.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-size.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-aria2-removal.patch"
+git -C "$work_root/frontend" apply "$repo_root/frontend-tinylist.patch"
 
 curl -fsSL "$i18n_url" -o "$work_root/i18n.tar.gz"
 printf '%s  %s\n' "$i18n_sha256" "$work_root/i18n.tar.gz" | sha256sum --check -

@@ -1,0 +1,352 @@
+diff --git a/index.html b/index.html
+index c50aacb..26e11d2 100644
+--- a/index.html
++++ b/index.html
+@@ -6,13 +6,13 @@
+     <meta name="viewport" content="width=device-width, initial-scale=1" />
+     <meta name="referrer" content="same-origin" />
+     <meta name="color-scheme" content="light dark" />
+-    <meta name="generator" content="OpenList" />
++    <meta name="generator" content="TinyList" />
+     <meta name="theme-color" content="#000000" />
+     <meta name="google" content="notranslate" />
+     <link href="/manifest.json" rel="manifest" />
+     <meta name="apple-mobile-web-app-capable" content="yes" />
+-    <meta name="apple-mobile-web-app-title" content="OpenList" />
+-    <link rel="apple-touch-icon" href="https://res.oplist.org/logo/logo.png" />
++    <meta name="apple-mobile-web-app-title" content="TinyList" />
++    <link rel="apple-touch-icon" href="/favicon.ico" />
+     <link
+       rel="shortcut icon"
+       type="image/ico"
+diff --git a/public/static/manifest.json b/public/static/manifest.json
+index b053a04..c619126 100644
+--- a/public/static/manifest.json
++++ b/public/static/manifest.json
+@@ -2,10 +2,10 @@
+   "display": "standalone",
+   "scope": "/",
+   "start_url": "/",
+-  "name": "OpenList",
++  "name": "TinyList",
+   "icons": [
+     {
+-      "src": "https://res.oplist.org/logo/512x512.png",
++      "src": "/favicon.ico",
+       "sizes": "512x512",
+       "type": "image/png"
+     }
+diff --git a/src/app/index.tsx b/src/app/index.tsx
+index fa3b363..8312cf7 100644
+--- a/src/app/index.tsx
++++ b/src/app/index.tsx
+@@ -1,13 +1,36 @@
+-import { HopeProvider, NotificationsProvider } from "@hope-ui/solid"
+-import { ErrorBoundary, Suspense } from "solid-js"
++import {
++  HopeProvider,
++  NotificationsProvider,
++  useColorMode,
++} from "@hope-ui/solid"
++import { ErrorBoundary, onCleanup, onMount, Suspense } from "solid-js"
+ import { Error, FullScreenLoading } from "~/components"
+ import App from "./App"
+ import { globalStyles, theme } from "./theme"
+
++try {
++  localStorage.removeItem("hope-ui-color-mode")
++} catch {}
++
++const SystemColorMode = () => {
++  const { setColorMode } = useColorMode()
++
++  onMount(() => {
++    const media = window.matchMedia("(prefers-color-scheme: dark)")
++    const syncColorMode = () => setColorMode(media.matches ? "dark" : "light")
++    syncColorMode()
++    media.addEventListener("change", syncColorMode)
++    onCleanup(() => media.removeEventListener("change", syncColorMode))
++  })
++
++  return null
++}
++
+ const Index = () => {
+   globalStyles()
+   return (
+     <HopeProvider config={theme}>
++      <SystemColorMode />
+       <ErrorBoundary
+         fallback={(err) => {
+           console.error("error", err)
+diff --git a/src/components/Base.tsx b/src/components/Base.tsx
+index 30c996b..12b9210 100644
+--- a/src/components/Base.tsx
++++ b/src/components/Base.tsx
+@@ -18,7 +18,6 @@ import {
+   Tooltip,
+   VStack,
+ } from "@hope-ui/solid"
+-import { SwitchColorMode } from "./SwitchColorMode"
+ import {
+   ComponentProps,
+   For,
+@@ -35,7 +34,6 @@ import { useT } from "~/hooks"
+
+ export const Error = (props: {
+   msg: string
+-  disableColor?: boolean
+   h?: string
+   actions?: JSXElement
+ }) => {
+@@ -65,11 +63,6 @@ export const Error = (props: {
+             {props.actions}
+           </Flex>
+         </Show>
+-        <Show when={!props.disableColor}>
+-          <Flex mt="$2" justifyContent="end">
+-            <SwitchColorMode />
+-          </Flex>
+-        </Show>
+       </Box>
+     </Center>
+   )
+diff --git a/src/components/SwitchColorMode.tsx b/src/components/SwitchColorMode.tsx
+deleted file mode 100644
+index 6c38226..0000000
+--- a/src/components/SwitchColorMode.tsx
++++ /dev/null
+@@ -1,30 +0,0 @@
+-import { Icon, useColorMode, useColorModeValue } from "@hope-ui/solid"
+-// import { IoMoonOutline as Moon } from "solid-icons/io";
+-import { FiSun as Sun } from "solid-icons/fi"
+-import { FiMoon as Moon } from "solid-icons/fi"
+-
+-const SwitchColorMode = () => {
+-  const { toggleColorMode } = useColorMode()
+-  const icon = useColorModeValue(
+-    {
+-      size: "$8",
+-      component: Moon,
+-      p: "$0_5",
+-    },
+-    {
+-      size: "$8",
+-      component: Sun,
+-      p: "$0_5",
+-    },
+-  )
+-  return (
+-    <Icon
+-      cursor="pointer"
+-      boxSize={icon().size}
+-      as={icon().component}
+-      onClick={toggleColorMode}
+-      p={icon().p}
+-    />
+-  )
+-}
+-export { SwitchColorMode }
+diff --git a/src/components/index.ts b/src/components/index.ts
+index 098d36c..8a097ab 100644
+--- a/src/components/index.ts
++++ b/src/components/index.ts
+@@ -1,5 +1,4 @@
+ export * from "./FullLoading"
+-export * from "./SwitchColorMode"
+ export * from "./Hello"
+ export * from "./FolderTree"
+ export * from "./EnhancedFolderTree"
+diff --git a/src/pages/home/Obj.tsx b/src/pages/home/Obj.tsx
+index 0a96c63..92ed273 100644
+--- a/src/pages/home/Obj.tsx
++++ b/src/pages/home/Obj.tsx
+@@ -92,7 +92,6 @@ export const Obj = () => {
+           <Match when={objStore.err}>
+             <Error
+               msg={objStore.err}
+-              disableColor
+               actions={
+                 shouldShowStorageButton() ? storageErrorActions() : undefined
+               }
+diff --git a/src/pages/home/previews/archive.tsx b/src/pages/home/previews/archive.tsx
+index b6e9707..38bf3db 100644
+--- a/src/pages/home/previews/archive.tsx
++++ b/src/pages/home/previews/archive.tsx
+@@ -520,7 +520,7 @@ const Preview = () => {
+       </Breadcrumb>
+       <Switch>
+         <Match when={error() !== ""}>
+-          <Error msg={error()} disableColor />
++          <Error msg={error()} />
+         </Match>
+         <Match when={requiringPassword()}>
+           <Password
+diff --git a/src/pages/home/toolbar/LocalSettings.tsx b/src/pages/home/toolbar/LocalSettings.tsx
+index d9ca24b..6443d24 100644
+--- a/src/pages/home/toolbar/LocalSettings.tsx
++++ b/src/pages/home/toolbar/LocalSettings.tsx
+@@ -1,5 +1,4 @@
+ import {
+-  Center,
+   createDisclosure,
+   Drawer,
+   DrawerBody,
+@@ -9,7 +8,6 @@ import {
+   DrawerOverlay,
+   FormControl,
+   FormLabel,
+-  HStack,
+   Input,
+   Select,
+   SelectContent,
+@@ -28,7 +26,6 @@ import {
+ } from "@hope-ui/solid"
+ import { For, Match, onCleanup, Switch } from "solid-js"
+ import { FaSolidMinus, FaSolidPlus } from "solid-icons/fa"
+-import { SwitchColorMode } from "~/components"
+ import { useT } from "~/hooks"
+ import { initialLocalSettings, local, LocalSetting, setLocal } from "~/store"
+ import { bus } from "~/utils"
+@@ -150,11 +147,6 @@ export const LocalSettings = () => {
+               {(setting) => <LocalSettingEdit {...setting} />}
+             </For>
+           </VStack>
+-          <Center mt="$4">
+-            <HStack spacing="$4" p="$2" color="$neutral11">
+-              <SwitchColorMode />
+-            </HStack>
+-          </Center>
+         </DrawerBody>
+       </DrawerContent>
+     </Drawer>
+diff --git a/src/pages/manage/sidemenu_items.tsx b/src/pages/manage/sidemenu_items.tsx
+index 11a54eb..5448c8b 100644
+--- a/src/pages/manage/sidemenu_items.tsx
++++ b/src/pages/manage/sidemenu_items.tsx
+@@ -12,6 +12,13 @@ export type SideMenuItem = SideMenuItemProps & {
+ }
+
+ export const side_menu_items: SideMenuItem[] = [
++  {
++    title: "manage.sidemenu.home",
++    icon: IoHome,
++    to: "/",
++    role: UserRole.GUEST,
++    refresh: true,
++  },
+   {
+     title: "manage.sidemenu.profile",
+     icon: BsFingerprint,
+@@ -35,11 +42,4 @@ export const side_menu_items: SideMenuItem[] = [
+     to: "/@manage/storages",
+     component: lazy(() => import("./storages/Storages")),
+   },
+-  {
+-    title: "manage.sidemenu.home",
+-    icon: IoHome,
+-    to: "/",
+-    role: UserRole.GUEST,
+-    refresh: true,
+-  },
+ ]
+diff --git a/src/pages/manage/routes.tsx b/src/pages/manage/routes.tsx
+index c6f933d..3736779 100644
+--- a/src/pages/manage/routes.tsx
++++ b/src/pages/manage/routes.tsx
+@@ -47,6 +47,7 @@ const Placeholder = (props: { title: string; to: string }) => {
+
+ const get_routes = (items: SideMenuItem[], acc: Route[] = []) => {
+   items.forEach((item) => {
++    if (item.refresh) return
+     if (item.children) {
+       get_routes(item.children, acc)
+     } else {
+diff --git a/src/pages/login/index.tsx b/src/pages/login/index.tsx
+index ea79eb3..a073808 100644
+--- a/src/pages/login/index.tsx
++++ b/src/pages/login/index.tsx
+@@ -12,7 +12,6 @@ import {
+   Icon,
+ } from "@hope-ui/solid"
+ import { createMemo, createSignal, Show, onMount, onCleanup } from "solid-js"
+-import { SwitchColorMode } from "~/components"
+ import { useFetch, useLoading, useT, useTitle, useRouter } from "~/hooks"
+ import {
+   changeToken,
+@@ -327,7 +326,6 @@ const Login = () => {
+           color="$neutral10"
+           w="$full"
+         >
+-          <SwitchColorMode />
+           <SSOLogin />
+           <Show when={AuthnSignEnabled}>
+             <Icon
+diff --git a/src/pages/manage/Header.tsx b/src/pages/manage/Header.tsx
+index 72d5a14..ff17064 100644
+--- a/src/pages/manage/Header.tsx
++++ b/src/pages/manage/Header.tsx
+@@ -1,6 +1,5 @@
+ import {
+   Box,
+-  Center,
+   createDisclosure,
+   Drawer,
+   DrawerBody,
+@@ -16,7 +15,6 @@ import {
+ } from "@hope-ui/solid"
+ import { TiThMenu } from "solid-icons/ti"
+ import { IoExit } from "solid-icons/io"
+-import { SwitchColorMode } from "~/components"
+ import { useFetch, useRouter, useT } from "~/hooks"
+ import { SideMenu } from "./SideMenu"
+ import { side_menu_items } from "./sidemenu_items"
+@@ -88,11 +86,6 @@ const Header = () => {
+           <DrawerHeader color="$info9">{t("manage.title")}</DrawerHeader>
+           <DrawerBody>
+             <SideMenu items={side_menu_items} />
+-            <Center>
+-              <HStack spacing="$4" p="$2" color="$neutral11">
+-                <SwitchColorMode />
+-              </HStack>
+-            </Center>
+           </DrawerBody>
+         </DrawerContent>
+       </Drawer>
+diff --git a/src/pages/manage/index.tsx b/src/pages/manage/index.tsx
+index 85830e9..f2139c8 100644
+--- a/src/pages/manage/index.tsx
++++ b/src/pages/manage/index.tsx
+@@ -1,5 +1,5 @@
+-import { Box, Center, Flex, HStack, useColorModeValue } from "@hope-ui/solid"
+-import { FullLoading, SwitchColorMode } from "~/components"
++import { Box, Flex, useColorModeValue } from "@hope-ui/solid"
++import { FullLoading } from "~/components"
+ import { useT, useTitle } from "~/hooks"
+ import { Header } from "./Header"
+ import { SideMenu } from "./SideMenu"
+@@ -30,11 +30,6 @@ const Manage = () => {
+           overflowY="auto"
+         >
+           <SideMenu items={side_menu_items} />
+-          <Center>
+-            <HStack spacing="$4" p="$2" color="$neutral11">
+-              <SwitchColorMode />
+-            </HStack>
+-          </Center>
+         </Box>
+         <Box
+           w={{
+diff --git a/src/store/settings.ts b/src/store/settings.ts
+index 7254c50..5cb9edb 100644
+--- a/src/store/settings.ts
++++ b/src/store/settings.ts
+@@ -8,7 +8,7 @@ export const setSettings = (items: Record<string, string>) => {
+   })
+   const version = settings["version"] || "Unknown"
+   console.log(
+-    `%c OpenList %c ${version} %c https://github.com/OpenListTeam/OpenList`,
++    `%c TinyList %c ${version} %c https://github.com/OpenListTeam/OpenList`,
+     "color: #fff; background: #5f5f5f",
+     "color: #fff; background: #70c6be",
+     "",
