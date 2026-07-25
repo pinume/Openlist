@@ -125,7 +125,10 @@ func BeginAuthnRegistration(c *gin.Context) {
 		common.ErrorStrResp(c, "WebAuthn is not enabled", 403)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 
 	authnInstance, err := authn.NewAuthnInstance(c)
 	if err != nil {
@@ -161,7 +164,10 @@ func FinishAuthnRegistration(c *gin.Context) {
 		common.ErrorStrResp(c, "WebAuthn is not enabled", 403)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	sessionDataString := c.GetHeader("Session")
 
 	authnInstance, err := authn.NewAuthnInstance(c)
@@ -202,7 +208,10 @@ func FinishAuthnRegistration(c *gin.Context) {
 }
 
 func DeleteAuthnLogin(c *gin.Context) {
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	type DeleteAuthnReq struct {
 		ID string `json:"id"`
 	}
@@ -230,7 +239,10 @@ func GetAuthnCredentials(c *gin.Context) {
 		ID          []byte `json:"id"`
 		FingerPrint string `json:"fingerprint"`
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	credentials := user.WebAuthnCredentials()
 	res := make([]WebAuthnCredentials, 0, len(credentials))
 	for _, v := range credentials {

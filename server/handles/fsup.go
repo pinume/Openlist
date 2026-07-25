@@ -53,7 +53,10 @@ func FsStream(c *gin.Context) {
 	}
 	asTask := c.GetHeader("As-Task") == "true"
 	overwrite := c.GetHeader("Overwrite") != "false"
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	path, err = user.JoinPath(path)
 	if err != nil {
 		common.ErrorResp(c, err, 403)
@@ -142,7 +145,10 @@ func FsForm(c *gin.Context) {
 	}
 	asTask := c.GetHeader("As-Task") == "true"
 	overwrite := c.GetHeader("Overwrite") != "false"
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	path, err = user.JoinPath(path)
 	if err != nil {
 		common.ErrorResp(c, err, 403)

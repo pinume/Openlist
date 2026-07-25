@@ -40,3 +40,23 @@ func TestAuthenticationMiddlewareRejectsEmptyToken(t *testing.T) {
 		})
 	}
 }
+
+func TestAuthAdminRejectsMissingUserContext(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	nextCalled := false
+	router := gin.New()
+	router.GET("/", AuthAdmin, func(c *gin.Context) {
+		nextCalled = true
+		c.Status(http.StatusNoContent)
+	})
+
+	recorder := httptest.NewRecorder()
+	router.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/", nil))
+
+	if nextCalled {
+		t.Fatal("request without a user reached the admin handler")
+	}
+	if !strings.Contains(recorder.Body.String(), `"code":401`) {
+		t.Fatalf("expected authentication error, got %s", recorder.Body.String())
+	}
+}

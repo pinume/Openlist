@@ -87,7 +87,7 @@ func UserPathAccess(c *gin.Context) {
 		c.Next()
 		return
 	}
-	user, ok := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := common.UserFromContext(c.Request.Context())
 	if !ok || user == nil {
 		common.ErrorPage(c, errs.PermissionDenied, 401)
 		return

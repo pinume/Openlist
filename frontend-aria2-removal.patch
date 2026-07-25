@@ -19,7 +19,7 @@ diff --git a/src/types/setting.ts b/src/types/setting.ts
 index f40d482..c710158 100644
 --- a/src/types/setting.ts
 +++ b/src/types/setting.ts
-@@ -3,14 +3,13 @@ import { Type } from "."
+@@ -3,14 +3,12 @@ import { Type } from "."
  export enum Group {
    SINGLE,
    SITE,
@@ -31,7 +31,8 @@ index f40d482..c710158 100644
 +  INDEX = 6,
    SSO,
    LDAP,
-   S3,
-   FTP,
+-  S3,
+-  FTP,
++  FTP = 10,
    TRAFFIC,
  }

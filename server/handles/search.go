@@ -3,7 +3,6 @@ package handles
 import (
 	"path"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
@@ -33,7 +32,10 @@ func Search(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	req.Parent, err = user.JoinPath(req.Parent)
 	if err != nil {
 		common.ErrorResp(c, err, 400)

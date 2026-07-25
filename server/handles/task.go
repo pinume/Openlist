@@ -4,8 +4,6 @@ import (
 	"math"
 	"time"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
-	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/task"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
@@ -69,7 +67,7 @@ func argsContains[T comparable](v T, slice ...T) bool {
 }
 
 func getUserInfo(c *gin.Context) (bool, uint, bool) {
-	if user, ok := c.Request.Context().Value(conf.UserKey).(*model.User); ok {
+	if user, ok := common.UserFromContext(c.Request.Context()); ok {
 		return user.IsAdmin(), user.ID, true
 	} else {
 		return false, 0, false

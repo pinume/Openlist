@@ -29,7 +29,10 @@ func FsMkdir(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	reqPath, err := user.JoinPath(req.Path)
 	if err != nil {
 		common.ErrorResp(c, err, 403)
@@ -76,7 +79,10 @@ func FsMove(c *gin.Context) {
 		common.ErrorStrResp(c, "Empty file names", 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanMove() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -178,7 +184,10 @@ func FsCopy(c *gin.Context) {
 		common.ErrorStrResp(c, "Empty file names", 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanCopy() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -288,7 +297,10 @@ func FsRename(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanRename() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -350,7 +362,10 @@ func FsRemove(c *gin.Context) {
 		common.ErrorStrResp(c, "Empty file names", 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanRemove() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -406,7 +421,10 @@ func FsRemoveEmptyDirectory(c *gin.Context) {
 		return
 	}
 
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanRemove() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -503,8 +521,6 @@ func Link(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	//user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	//rawPath := stdpath.Join(user.BasePath, req.Path)
 	// why need not join base_path? because it's always the full path
 	rawPath := req.Path
 	storage, err := fs.GetStorage(rawPath, &fs.GetStoragesArgs{})

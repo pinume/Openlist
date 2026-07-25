@@ -7,12 +7,57 @@ import (
 	"strings"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
+	"github.com/OpenListTeam/OpenList/v4/internal/errs"
+	"github.com/OpenListTeam/OpenList/v4/internal/model"
+	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/internal/setting"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/public"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
+	"github.com/pkg/errors"
 )
+
+// CurrentUser returns the authenticated user stored by the auth middleware.
+// A missing or invalid user is treated as an authentication failure instead of
+// allowing a handler to panic on a type assertion.
+func CurrentUser(c *gin.Context) (*model.User, bool) {
+	user, ok := common.UserFromContext(c.Request.Context())
+	if !ok {
+		common.ErrorStrResp(c, "Authentication required", 401)
+		c.Abort()
+		return nil, false
+	}
+	return user, true
+}
+
+// resolveAndAuthorize resolves a user-relative request path and applies the
+// shared meta/password permission check. On failure it writes the response.
+func resolveAndAuthorize(c *gin.Context, user *model.User, reqPath, password string) (string, *model.Meta, bool) {
+	resolvedPath, err := user.JoinPath(reqPath)
+	if err != nil {
+		common.ErrorResp(c, err, 403)
+		return "", nil, false
+	}
+	meta, ok := authorizeResolvedPath(c, user, resolvedPath, password)
+	return resolvedPath, meta, ok
+}
+
+// authorizeResolvedPath applies the shared authorization flow to a path that
+// has already been resolved, such as an administrator's force-root request.
+func authorizeResolvedPath(c *gin.Context, user *model.User, resolvedPath, password string) (*model.Meta, bool) {
+	meta, err := op.GetNearestMeta(resolvedPath)
+	if err != nil && !errors.Is(errors.Cause(err), errs.MetaNotFound) {
+		common.ErrorResp(c, err, 500, true)
+		return nil, false
+	}
+	common.GinAppendValues(c, conf.MetaKey, meta)
+	if !common.CanAccess(user, meta, resolvedPath, password) {
+		common.ErrorStrResp(c, "password is incorrect or you have no permission", 403)
+		return nil, false
+	}
+	return meta, true
+}
 
 func Favicon(c *gin.Context) {
 	favicon := setting.GetStr(conf.Favicon)

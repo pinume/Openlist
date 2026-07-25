@@ -23,7 +23,7 @@ func ResetToken(c *gin.Context) {
 		common.ErrorResp(c, err, 500)
 		return
 	}
-	sign.Instance()
+	sign.Reload()
 	common.SuccessResp(c, token)
 }
 

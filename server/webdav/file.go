@@ -37,7 +37,10 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	dstDir := path.Dir(dst)
 	srcName := path.Base(src)
 	dstName := path.Base(dst)
-	user := ctx.Value(conf.UserKey).(*model.User)
+	user, ok := common.UserFromContext(ctx)
+	if !ok {
+		return http.StatusUnauthorized, nil
+	}
 	if srcDir != dstDir && !user.CanMove() {
 		return http.StatusForbidden, nil
 	}
@@ -80,7 +83,10 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int, err error) {
 	srcDir := path.Dir(src)
 	dstDir := path.Dir(dst)
-	user := ctx.Value(conf.UserKey).(*model.User)
+	user, ok := common.UserFromContext(ctx)
+	if !ok {
+		return http.StatusUnauthorized, nil
+	}
 	if !user.CanCopy() {
 		return http.StatusForbidden, nil
 	}

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
-	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/fs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
@@ -16,7 +15,6 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
-	"github.com/pkg/errors"
 )
 
 type ListReq struct {
@@ -64,24 +62,16 @@ func FsListSplit(c *gin.Context) {
 		return
 	}
 	req.Validate()
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	FsList(c, &req, user)
 }
 
 func FsList(c *gin.Context, req *ListReq, user *model.User) {
-	reqPath, err := user.JoinPath(req.Path)
-	if err != nil {
-		common.ErrorResp(c, err, 403)
-		return
-	}
-	meta, err := op.GetNearestMeta(reqPath)
-	if err != nil && !errors.Is(errors.Cause(err), errs.MetaNotFound) {
-		common.ErrorResp(c, err, 500, true)
-		return
-	}
-	common.GinAppendValues(c, conf.MetaKey, meta)
-	if !common.CanAccess(user, meta, reqPath, req.Password) {
-		common.ErrorStrResp(c, "password is incorrect or you have no permission", 403)
+	reqPath, meta, ok := resolveAndAuthorize(c, user, req.Path, req.Password)
+	if !ok {
 		return
 	}
 	canWriteContentAtPath := common.CanWrite(user, meta, reqPath) && (user.CanWriteContent() || common.CanWriteContentBypassUserPerms(meta, reqPath))
@@ -123,7 +113,10 @@ func FsDirs(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	reqPath := req.Path
 	if req.ForceRoot {
 		if !user.IsAdmin() {
@@ -138,14 +131,8 @@ func FsDirs(c *gin.Context) {
 		}
 		reqPath = tmp
 	}
-	meta, err := op.GetNearestMeta(reqPath)
-	if err != nil && !errors.Is(errors.Cause(err), errs.MetaNotFound) {
-		common.ErrorResp(c, err, 500, true)
-		return
-	}
-	common.GinAppendValues(c, conf.MetaKey, meta)
-	if !common.CanAccess(user, meta, reqPath, req.Password) {
-		common.ErrorStrResp(c, "password is incorrect or you have no permission", 403)
+	meta, ok := authorizeResolvedPath(c, user, reqPath, req.Password)
+	if !ok {
 		return
 	}
 	objs, err := fs.List(c.Request.Context(), reqPath, &fs.ListArgs{})
@@ -205,13 +192,20 @@ func isEncrypt(meta *model.Meta, path string) bool {
 func pagination(objs []model.Obj, req *model.PageReq) (int, []model.Obj) {
 	pageIndex, pageSize := req.Page, req.PerPage
 	total := len(objs)
-	start := (pageIndex - 1) * pageSize
-	if start > total {
+	if pageIndex < 1 {
+		pageIndex = 1
+	}
+	if pageSize < 1 {
+		pageSize = model.MaxInt
+	}
+	previousPages := pageIndex - 1
+	if previousPages > 0 && previousPages > total/pageSize {
 		return total, []model.Obj{}
 	}
-	end := start + pageSize
-	if end > total {
-		end = total
+	start := previousPages * pageSize
+	end := total
+	if pageSize < total-start {
+		end = start + pageSize
 	}
 	return total, objs[start:end]
 }
@@ -258,24 +252,16 @@ func FsGetSplit(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	FsGet(c, &req, user)
 }
 
 func FsGet(c *gin.Context, req *FsGetReq, user *model.User) {
-	reqPath, err := user.JoinPath(req.Path)
-	if err != nil {
-		common.ErrorResp(c, err, 403)
-		return
-	}
-	meta, err := op.GetNearestMeta(reqPath)
-	if err != nil && !errors.Is(errors.Cause(err), errs.MetaNotFound) {
-		common.ErrorResp(c, err, 500, true)
-		return
-	}
-	common.GinAppendValues(c, conf.MetaKey, meta)
-	if !common.CanAccess(user, meta, reqPath, req.Password) {
-		common.ErrorStrResp(c, "password is incorrect or you have no permission", 403)
+	reqPath, meta, ok := resolveAndAuthorize(c, user, req.Path, req.Password)
+	if !ok {
 		return
 	}
 	obj, err := fs.Get(c.Request.Context(), reqPath, &fs.GetArgs{
@@ -385,23 +371,15 @@ func FsOther(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	var err error
-	req.Path, err = user.JoinPath(req.Path)
-	if err != nil {
-		common.ErrorResp(c, err, 403)
+	user, ok := CurrentUser(c)
+	if !ok {
 		return
 	}
-	meta, err := op.GetNearestMeta(req.Path)
-	if err != nil && !errors.Is(errors.Cause(err), errs.MetaNotFound) {
-		common.ErrorResp(c, err, 500)
+	reqPath, _, ok := resolveAndAuthorize(c, user, req.Path, req.Password)
+	if !ok {
 		return
 	}
-	common.GinAppendValues(c, conf.MetaKey, meta)
-	if !common.CanAccess(user, meta, req.Path, req.Password) {
-		common.ErrorStrResp(c, "password is incorrect or you have no permission", 403)
-		return
-	}
+	req.Path = reqPath
 	res, err := fs.Other(c.Request.Context(), req.FsOtherArgs)
 	if err != nil {
 		common.ErrorResp(c, err, 500)

@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"image/png"
 
-	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/server/common"
@@ -91,9 +90,12 @@ type UserResp struct {
 	Otp bool `json:"otp"`
 }
 
-// CurrentUser gets the current user from the authenticated request.
-func CurrentUser(c *gin.Context) {
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+// CurrentUser get current user by token
+func CurrentUserInfo(c *gin.Context) {
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	userResp := UserResp{
 		User: *user,
 	}
@@ -110,7 +112,10 @@ func UpdateCurrent(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	user.Username = req.Username
 	if req.Password != "" {
 		user.SetPassword(req.Password)
@@ -124,7 +129,10 @@ func UpdateCurrent(c *gin.Context) {
 }
 
 func Generate2FA(c *gin.Context) {
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "TinyList",
 		AccountName: user.Username,
@@ -159,7 +167,10 @@ func Verify2FA(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !totp.Validate(req.Code, req.Secret) {
 		common.ErrorStrResp(c, model.Invalid2FACode, 400)
 		return

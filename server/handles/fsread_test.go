@@ -6,6 +6,58 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 )
 
+func TestPaginationAvoidsIntegerOverflow(t *testing.T) {
+	objs := make([]model.Obj, 10)
+	tests := []struct {
+		name    string
+		req     model.PageReq
+		wantLen int
+	}{
+		{
+			name:    "default page size on first page",
+			req:     model.PageReq{Page: 1, PerPage: model.MaxInt},
+			wantLen: 10,
+		},
+		{
+			name:    "default page size on third page",
+			req:     model.PageReq{Page: 3, PerPage: model.MaxInt},
+			wantLen: 0,
+		},
+		{
+			name:    "default page size on fifth page",
+			req:     model.PageReq{Page: 5, PerPage: model.MaxInt},
+			wantLen: 0,
+		},
+		{
+			name:    "normal middle page",
+			req:     model.PageReq{Page: 2, PerPage: 3},
+			wantLen: 3,
+		},
+		{
+			name:    "normal final page",
+			req:     model.PageReq{Page: 4, PerPage: 3},
+			wantLen: 1,
+		},
+		{
+			name:    "invalid values use defaults",
+			req:     model.PageReq{},
+			wantLen: 10,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			total, got := pagination(objs, &tt.req)
+			if total != len(objs) {
+				t.Fatalf("pagination() total = %d, want %d", total, len(objs))
+			}
+			if len(got) != tt.wantLen {
+				t.Errorf("pagination() returned %d objects, want %d", len(got), tt.wantLen)
+			}
+		})
+	}
+}
+
 func TestGetReadme(t *testing.T) {
 	tests := []struct {
 		name   string

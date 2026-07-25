@@ -30,7 +30,10 @@ func FsRecursiveMove(c *gin.Context) {
 		return
 	}
 
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanMove() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -162,7 +165,10 @@ func FsBatchRename(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanRename() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
@@ -220,7 +226,10 @@ func FsRegexRename(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
+	user, ok := CurrentUser(c)
+	if !ok {
+		return
+	}
 	if !user.CanRename() {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return

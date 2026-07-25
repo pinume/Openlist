@@ -1,6 +1,7 @@
 package common
 
 import (
+	"context"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -11,6 +12,11 @@ import (
 )
 
 var SecretKey []byte
+
+func UserFromContext(ctx context.Context) (*model.User, bool) {
+	user, ok := ctx.Value(conf.UserKey).(*model.User)
+	return user, ok && user != nil
+}
 
 type UserClaims struct {
 	Username string `json:"username"`

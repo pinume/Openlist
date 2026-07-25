@@ -41,7 +41,8 @@ func (s HMACSign) Verify(data, sign string) error {
 		return ErrSignExpired
 	}
 	// verify sign
-	if s.Sign(data, expires) != sign {
+	expected := s.Sign(data, expires)
+	if !hmac.Equal([]byte(expected), []byte(sign)) {
 		return ErrSignInvalid
 	}
 	return nil
