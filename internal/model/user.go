@@ -15,9 +15,8 @@ import (
 )
 
 const (
-	GENERAL = iota
-	GUEST   // only one exists
-	ADMIN
+	GENERAL = 0
+	ADMIN   = 2
 )
 
 const (
@@ -26,8 +25,6 @@ const (
 	InvalidUsernameOrPassword = "Invalid username or password"
 	Invalid2FACode            = "Invalid 2FA code"
 	TooManyAttempts           = "Too many unsuccessful sign-in attempts have been made using an incorrect username or password, Try again later."
-	GuestCannotUpdateProfile  = "Guest user can not update profile"
-	GuestCannotGenerate2FA    = "Guest user can not generate 2FA code"
 )
 
 var LoginCache = cache.NewMemCache[int]()
@@ -58,8 +55,7 @@ type User struct {
 	//   7:  can remove
 	//   8:  webdav read
 	//   9:  webdav write
-	//   10: ftp/sftp login and read
-	//   11: ftp/sftp write
+	//   10-11: reserved
 	//   12: can read archives
 	//   13: can decompress archives
 	Permission int32  `json:"permission"`
@@ -67,10 +63,6 @@ type User struct {
 	SsoID      string `json:"sso_id"` // unique by sso platform
 	Authn      string `gorm:"type:text" json:"-"`
 	AllowLdap  bool   `json:"allow_ldap" gorm:"default:true"`
-}
-
-func (u *User) IsGuest() bool {
-	return u.Role == GUEST
 }
 
 func (u *User) IsAdmin() bool {
@@ -168,22 +160,6 @@ func CanWebdavManage(permission int32) bool {
 
 func (u *User) CanWebdavManage() bool {
 	return CanWebdavManage(u.Permission)
-}
-
-func CanFTPAccess(permission int32) bool {
-	return (permission>>10)&1 == 1
-}
-
-func (u *User) CanFTPAccess() bool {
-	return CanFTPAccess(u.Permission)
-}
-
-func CanFTPManage(permission int32) bool {
-	return (permission>>11)&1 == 1
-}
-
-func (u *User) CanFTPManage() bool {
-	return CanFTPManage(u.Permission)
 }
 
 func CanReadArchives(permission int32) bool {

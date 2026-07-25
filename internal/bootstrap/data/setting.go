@@ -18,6 +18,19 @@ import (
 const defaultAnnouncement = "Welcome to the OpenList project!\nFor the latest updates, to contribute code, or to submit suggestions and issues, please visit our [project repository](https://github.com/OpenListTeam/OpenList)."
 const defaultOpenListLogo = "https://res.oplist.org/logo/logo.svg"
 
+var removedServiceSettingKeys = map[string]struct{}{
+	"s3_buckets":                  {},
+	"s3_access_key_id":            {},
+	"s3_secret_access_key":        {},
+	"ftp_public_host":             {},
+	"ftp_pasv_port_map":           {},
+	"ftp_mandatory_tls":           {},
+	"ftp_implicit_tls":            {},
+	"ftp_tls_private_key_path":    {},
+	"ftp_tls_public_cert_path":    {},
+	"sftp_disable_password_login": {},
+}
+
 func initSettings() {
 	initialSettingItems := InitialSettings()
 	isActive := func(key string) bool {
@@ -39,6 +52,12 @@ func initSettings() {
 			err := db.DeleteSettingItemByKey(v.Key)
 			if err != nil {
 				utils.Log.Errorf("failed delete setting with empty key: %+v", err)
+			}
+			continue
+		}
+		if _, removed := removedServiceSettingKeys[v.Key]; removed {
+			if err := db.DeleteSettingItemByKey(v.Key); err != nil {
+				utils.Log.Errorf("failed delete removed service setting %s: %+v", v.Key, err)
 			}
 			continue
 		}
@@ -190,20 +209,6 @@ func InitialSettings() []model.SettingItem {
 		{Key: conf.LdapDefaultDir, Value: "/", Type: conf.TypeString, Group: model.LDAP, Flag: model.PRIVATE},
 		{Key: conf.LdapDefaultPermission, Value: "0", Type: conf.TypeNumber, Group: model.LDAP, Flag: model.PRIVATE},
 		{Key: conf.LdapLoginTips, Value: "login with ldap", Type: conf.TypeString, Group: model.LDAP, Flag: model.PUBLIC},
-
-		// s3 settings
-		{Key: conf.S3AccessKeyId, Value: "", Type: conf.TypeString, Group: model.S3, Flag: model.PRIVATE},
-		{Key: conf.S3SecretAccessKey, Value: "", Type: conf.TypeString, Group: model.S3, Flag: model.PRIVATE},
-		{Key: conf.S3Buckets, Value: "[]", Type: conf.TypeString, Group: model.S3, Flag: model.PRIVATE},
-
-		// ftp settings
-		{Key: conf.FTPPublicHost, Value: "127.0.0.1", Type: conf.TypeString, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.FTPPasvPortMap, Value: "", Type: conf.TypeText, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.FTPMandatoryTLS, Value: "false", Type: conf.TypeBool, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.FTPImplicitTLS, Value: "false", Type: conf.TypeBool, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.FTPTLSPrivateKeyPath, Value: "", Type: conf.TypeString, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.FTPTLSPublicCertPath, Value: "", Type: conf.TypeString, Group: model.FTP, Flag: model.PRIVATE},
-		{Key: conf.SFTPDisablePasswordLogin, Value: "false", Type: conf.TypeBool, Group: model.FTP, Flag: model.PRIVATE},
 
 		// traffic settings
 		{Key: conf.TaskUploadThreadsNum, Value: strconv.Itoa(conf.Conf.Tasks.Upload.Workers), Type: conf.TypeNumber, Group: model.TRAFFIC, Flag: model.PRIVATE},

@@ -1,0 +1,392 @@
+diff --git a/src/types/user.ts b/src/types/user.ts
+--- a/src/types/user.ts
++++ b/src/types/user.ts
+@@ -1,7 +1,6 @@
+ export enum UserRole {
+-  GENERAL,
+-  GUEST,
+-  ADMIN,
++  GENERAL = 0,
++  ADMIN = 2,
+ }
+ 
+ export interface User {
+@@ -27,8 +26,6 @@ export const UserPermissionBits = {
+   delete: 7,
+   webdav_read: 8,
+   webdav_manage: 9,
+-  ftp_read: 10,
+-  ftp_manage: 11,
+   read_archives: 12,
+   decompress: 13,
+ } as const
+@@ -38,7 +35,6 @@ export const UserPermissions = Object.keys(UserPermissionBits) as Array<
+ >
+ 
+ export const UserMethods = {
+-  is_guest: (user: User) => user.role === UserRole.GUEST,
+   is_admin: (user: User) => user.role === UserRole.ADMIN,
+   is_general: (user: User) => user.role === UserRole.GENERAL,
+   can: (user: User, permission: number) => {
+diff --git a/src/types/setting.ts b/src/types/setting.ts
+--- a/src/types/setting.ts
++++ b/src/types/setting.ts
+@@ -9,9 +9,7 @@ export enum Group {
+   INDEX = 6,
+   SSO,
+   LDAP,
+-  S3,
+-  FTP,
+-  TRAFFIC,
++  TRAFFIC = 11,
+ }
+ export enum Flag {
+   PUBLIC,
+diff --git a/src/pages/manage/sidemenu_items.tsx b/src/pages/manage/sidemenu_items.tsx
+--- a/src/pages/manage/sidemenu_items.tsx
++++ b/src/pages/manage/sidemenu_items.tsx
+@@ -15,14 +15,14 @@ export const side_menu_items: SideMenuItem[] = [
+     title: "manage.sidemenu.home",
+     icon: IoHome,
+     to: "/",
+-    role: UserRole.GUEST,
++    role: UserRole.GENERAL,
+     refresh: true,
+   },
+   {
+     title: "manage.sidemenu.profile",
+     icon: BsFingerprint,
+     to: "/@manage",
+-    role: UserRole.GUEST,
++    role: UserRole.GENERAL,
+     component: lazy(() => import("./users/Profile")),
+   },
+   {
+diff --git a/src/pages/manage/users/Users.tsx b/src/pages/manage/users/Users.tsx
+--- a/src/pages/manage/users/Users.tsx
++++ b/src/pages/manage/users/Users.tsx
+@@ -35,14 +35,11 @@ import { Wether } from "~/components"
+ const Role = (props: { role: number }) => {
+   const roles = [
+     { name: "general", color: "info" },
+-    { name: "guest", color: "neutral" },
++    null,
+     { name: "admin", color: "accent" },
+   ]
+-  return (
+-    <Badge colorScheme={roles[props.role].color as any}>
+-      {roles[props.role].name}
+-    </Badge>
+-  )
++  const role = roles[props.role] ?? roles[0]!
++  return <Badge colorScheme={role.color as any}>{role.name}</Badge>
+ }
+ 
+ const Permissions = (props: { user: User }) => {
+diff --git a/src/pages/manage/users/AddOrEdit.tsx b/src/pages/manage/users/AddOrEdit.tsx
+--- a/src/pages/manage/users/AddOrEdit.tsx
++++ b/src/pages/manage/users/AddOrEdit.tsx
+@@ -20,9 +20,8 @@ import {
+   UserPermissions,
+ } from "~/types"
+ import { createStore } from "solid-js/store"
+-import { For, Show } from "solid-js"
++import { For } from "solid-js"
+ import { Me, me, setMe } from "~/store"
+-import { PublicKeys } from "./PublicKeys"
+ 
+ const Permission = (props: {
+   can: boolean
+@@ -83,30 +82,28 @@ const AddOrEdit = () => {
+     <MaybeLoading loading={userLoading()}>
+       <VStack w="$full" alignItems="start" spacing="$2">
+         <Heading>{t(`global.${id ? "edit" : "add"}`)}</Heading>
+-        <Show when={!UserMethods.is_guest(user)}>
+-          <FormControl w="$full" display="flex" flexDirection="column" required>
+-            <FormLabel for="username" display="flex" alignItems="center">
+-              {t(`users.username`)}
+-            </FormLabel>
+-            <Input
+-              id="username"
+-              value={user.username}
+-              onInput={(e) => setUser("username", e.currentTarget.value)}
+-            />
+-          </FormControl>
+-          <FormControl w="$full" display="flex" flexDirection="column" required>
+-            <FormLabel for="password" display="flex" alignItems="center">
+-              {t(`users.password`)}
+-            </FormLabel>
+-            <Input
+-              id="password"
+-              type="password"
+-              placeholder="********"
+-              value={user.password}
+-              onInput={(e) => setUser("password", e.currentTarget.value)}
+-            />
+-          </FormControl>
+-        </Show>
++        <FormControl w="$full" display="flex" flexDirection="column" required>
++          <FormLabel for="username" display="flex" alignItems="center">
++            {t(`users.username`)}
++          </FormLabel>
++          <Input
++            id="username"
++            value={user.username}
++            onInput={(e) => setUser("username", e.currentTarget.value)}
++          />
++        </FormControl>
++        <FormControl w="$full" display="flex" flexDirection="column" required>
++          <FormLabel for="password" display="flex" alignItems="center">
++            {t(`users.password`)}
++          </FormLabel>
++          <Input
++            id="password"
++            type="password"
++            placeholder="********"
++            value={user.password}
++            onInput={(e) => setUser("password", e.currentTarget.value)}
++          />
++        </FormControl>
+ 
+         <FormControl w="$full" display="flex" flexDirection="column" required>
+           <FormLabel for="base_path" display="flex" alignItems="center">
+@@ -183,9 +180,6 @@ const AddOrEdit = () => {
+         >
+           {t(`global.${id ? "save" : "add"}`)}
+         </Button>
+-        <Show when={id && !UserMethods.is_guest(user)}>
+-          <PublicKeys isMine={false} userId={parseInt(id)} />
+-        </Show>
+       </VStack>
+     </MaybeLoading>
+   )
+diff --git a/src/pages/manage/users/Profile.tsx b/src/pages/manage/users/Profile.tsx
+--- a/src/pages/manage/users/Profile.tsx
++++ b/src/pages/manage/users/Profile.tsx
+@@ -1,8 +1,4 @@
+ import {
+-  Alert,
+-  AlertDescription,
+-  AlertIcon,
+-  AlertTitle,
+   Badge,
+   Button,
+   FormControl,
+@@ -13,10 +9,9 @@ import {
+   Input,
+   SimpleGrid,
+   VStack,
+-  Text,
+ } from "@hope-ui/solid"
+ import { createSignal, For, JSXElement, onCleanup, Show } from "solid-js"
+-import { LinkWithBase, MaybeLoading } from "~/components"
++import { MaybeLoading } from "~/components"
+ import { useFetch, useManageTitle, useRouter, useT } from "~/hooks"
+ import { setMe, me, getSettingBool } from "~/store"
+ import {
+@@ -28,7 +23,6 @@ import {
+ } from "~/types"
+ import { handleResp, handleRespWithoutNotify, notify, r } from "~/utils"
+ import { WebauthnItem } from "./Webauthnitems"
+-import { PublicKeys } from "./PublicKeys"
+ 
+ const supported = () =>
+   !!globalThis.PublicKeyCredential?.parseCreationOptionsFromJSON
+@@ -123,109 +117,70 @@ const Profile = () => {
+     const resp = await getauthncredentials()
+     handleRespWithoutNotify(resp, setcredentials)
+   }
+-  if (
+-    supported() &&
+-    !UserMethods.is_guest(me()) &&
+-    getSettingBool("webauthn_login_enabled")
+-  ) {
++  if (supported() && getSettingBool("webauthn_login_enabled")) {
+     initauthnEdit()
+   }
+   return (
+     <VStack w="$full" spacing="$4" alignItems="start">
+-      <Show
+-        when={!UserMethods.is_guest(me())}
+-        fallback={
+-          <>
+-            <Alert
+-              status="warning"
+-              flexDirection={{
+-                "@initial": "column",
+-                "@lg": "row",
+-              }}
+-            >
+-              <AlertIcon mr="$2_5" />
+-              <AlertTitle mr="$2_5">{t("users.guest-tips")}</AlertTitle>
+-              <AlertDescription>{t("users.modify_nothing")}</AlertDescription>
+-            </Alert>
+-            <HStack spacing="$2">
+-              <Text>{t("global.have_account")}</Text>
+-              <Text
+-                color="$info9"
+-                as={LinkWithBase}
+-                href={`/@login?redirect=${encodeURIComponent(
+-                  location.pathname,
+-                )}`}
+-              >
+-                {t("global.go_login")}
+-              </Text>
+-            </HStack>
+-          </>
+-        }
+-      >
+-        <Heading>{t("users.update_profile")}</Heading>
+-        <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
+-          <FormControl>
+-            <FormLabel for="username">{t("users.change_username")}</FormLabel>
+-            <Input
+-              id="username"
+-              value={username()}
+-              onInput={(e) => {
+-                setUsername(e.currentTarget.value)
+-              }}
+-            />
+-          </FormControl>
+-        </SimpleGrid>
+-        <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
+-          <FormControl>
+-            <FormLabel for="password">{t("users.change_password")}</FormLabel>
+-            <Input
+-              id="password"
+-              type="password"
+-              placeholder="********"
+-              value={password()}
+-              onInput={(e) => {
+-                setPassword(e.currentTarget.value)
+-              }}
+-            />
+-            <FormHelperText>{t("users.change_password-tips")}</FormHelperText>
+-          </FormControl>
+-          <FormControl>
+-            <FormLabel for="confirm-password">
+-              {t("users.confirm_password")}
+-            </FormLabel>
+-            <Input
+-              id="confirm-password"
+-              type="password"
+-              placeholder="********"
+-              value={confirmPassword()}
+-              onInput={(e) => {
+-                setConfirmPassword(e.currentTarget.value)
+-              }}
+-            />
+-            <FormHelperText>{t("users.confirm_password-tips")}</FormHelperText>
+-          </FormControl>
+-        </SimpleGrid>
+-        <HStack spacing="$2">
+-          <Button loading={loading()} onClick={[saveMe, false]}>
+-            {t("global.save")}
++      <Heading>{t("users.update_profile")}</Heading>
++      <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
++        <FormControl>
++          <FormLabel for="username">{t("users.change_username")}</FormLabel>
++          <Input
++            id="username"
++            value={username()}
++            onInput={(e) => {
++              setUsername(e.currentTarget.value)
++            }}
++          />
++        </FormControl>
++      </SimpleGrid>
++      <SimpleGrid gap="$2" columns={{ "@initial": 1, "@md": 2 }}>
++        <FormControl>
++          <FormLabel for="password">{t("users.change_password")}</FormLabel>
++          <Input
++            id="password"
++            type="password"
++            placeholder="********"
++            value={password()}
++            onInput={(e) => {
++              setPassword(e.currentTarget.value)
++            }}
++          />
++          <FormHelperText>{t("users.change_password-tips")}</FormHelperText>
++        </FormControl>
++        <FormControl>
++          <FormLabel for="confirm-password">
++            {t("users.confirm_password")}
++          </FormLabel>
++          <Input
++            id="confirm-password"
++            type="password"
++            placeholder="********"
++            value={confirmPassword()}
++            onInput={(e) => {
++              setConfirmPassword(e.currentTarget.value)
++            }}
++          />
++          <FormHelperText>{t("users.confirm_password-tips")}</FormHelperText>
++        </FormControl>
++      </SimpleGrid>
++      <HStack spacing="$2">
++        <Button loading={loading()} onClick={[saveMe, false]}>
++          {t("global.save")}
++        </Button>
++        <Show when={!me().otp}>
++          <Button
++            colorScheme="accent"
++            onClick={() => {
++              to("/@manage/2fa")
++            }}
++          >
++            {t("users.enable_2fa")}
+           </Button>
+-          <Show when={!me().otp}>
+-            <Button
+-              colorScheme="accent"
+-              onClick={() => {
+-                to("/@manage/2fa")
+-              }}
+-            >
+-              {t("users.enable_2fa")}
+-            </Button>
+-          </Show>
+-        </HStack>
+-      </Show>
+-      <Show
+-        when={
+-          getSettingBool("sso_login_enabled") && !UserMethods.is_guest(me())
+-        }
+-      >
++        </Show>
++      </HStack>
++      <Show when={getSettingBool("sso_login_enabled")}>
+         <Heading>{t("users.sso_login")}</Heading>
+         <HStack spacing="$2">
+           <Show
+@@ -258,12 +213,7 @@ const Profile = () => {
+           </Show>
+         </HStack>
+       </Show>
+-      <Show
+-        when={
+-          !UserMethods.is_guest(me()) &&
+-          getSettingBool("webauthn_login_enabled")
+-        }
+-      >
++      <Show when={getSettingBool("webauthn_login_enabled")}>
+         <Heading>{t("users.webauthn")}</Heading>
+         <HStack wrap="wrap" gap="$2" mt="$2">
+           <MaybeLoading loading={getauthncredentialsloading()}>
+@@ -316,14 +266,6 @@ const Profile = () => {
+           )}
+         </For>
+       </HStack>
+-      <Show
+-        when={UserMethods.can(
+-          me(),
+-          UserPermissionBits.ftp_read,
+-        )}
+-      >
+-        <PublicKeys isMine={true} userId={me().id} />
+-      </Show>
+     </VStack>
+   )
+ }

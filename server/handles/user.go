@@ -35,8 +35,8 @@ func CreateUser(c *gin.Context) {
 		common.ErrorResp(c, err, 400)
 		return
 	}
-	if req.IsAdmin() || req.IsGuest() {
-		common.ErrorStrResp(c, "admin or guest user can not be created", 400, true)
+	if req.Role != model.GENERAL {
+		common.ErrorStrResp(c, "only general users can be created", 400, true)
 		return
 	}
 	req.SetPassword(req.Password)

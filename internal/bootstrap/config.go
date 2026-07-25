@@ -148,8 +148,6 @@ func InitConfig() {
 		}
 	}
 	convertAbsPath(&conf.Conf.Database.DBFile)
-	convertAbsPath(&conf.Conf.Scheme.CertFile)
-	convertAbsPath(&conf.Conf.Scheme.KeyFile)
 	convertAbsPath(&conf.Conf.Scheme.UnixFile)
 	convertAbsPath(&conf.Conf.Log.Name)
 	convertAbsPath(&conf.Conf.TempDir)

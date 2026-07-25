@@ -15,8 +15,7 @@ func TestAuthenticationMiddlewareRejectsEmptyToken(t *testing.T) {
 		name    string
 		handler gin.HandlerFunc
 	}{
-		{name: "Auth with disabled guest flag", handler: Auth(false)},
-		{name: "Auth with legacy guest flag", handler: Auth(true)},
+		{name: "Auth", handler: Auth()},
 		{name: "Authn", handler: Authn},
 	}
 

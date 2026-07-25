@@ -10,9 +10,7 @@ const (
 	INDEX
 	SSO
 	LDAP
-	S3
-	FTP
-	TRAFFIC
+	TRAFFIC = 11
 )
 
 const (

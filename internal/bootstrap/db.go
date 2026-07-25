@@ -48,4 +48,10 @@ func InitDB() {
 		log.Fatalf("failed to connect database:%s", err.Error())
 	}
 	db.Init(dB)
+	sshKeyTable := conf.Conf.Database.TablePrefix + "ssh_public_keys"
+	if dB.Migrator().HasTable(sshKeyTable) {
+		if err := dB.Migrator().DropTable(sshKeyTable); err != nil {
+			log.Fatalf("failed to remove obsolete SSH public key table: %s", err.Error())
+		}
+	}
 }

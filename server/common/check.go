@@ -61,7 +61,7 @@ func CanAccess(user *model.User, meta *model.Meta, reqPath string, password stri
 	if !CanRead(user, meta, reqPath) {
 		return false
 	}
-	// if is not guest and can access without password
+	// users with this permission can access without a directory password
 	if user.CanAccessWithoutPassword() {
 		return true
 	}

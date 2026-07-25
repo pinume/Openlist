@@ -24,9 +24,6 @@ func Init(e *gin.Engine) {
 	}
 	Cors(e)
 	g := e.Group(conf.URL.Path)
-	if conf.Conf.Scheme.HttpPort != -1 && conf.Conf.Scheme.HttpsPort != -1 && conf.Conf.Scheme.ForceHttps {
-		e.Use(middlewares.ForceHttps)
-	}
 	g.Any("/ping", func(c *gin.Context) {
 		c.String(200, "pong")
 	})
@@ -39,8 +36,6 @@ func Init(e *gin.Engine) {
 		g.Use(middlewares.MaxAllowed(conf.Conf.MaxConnections))
 	}
 	WebDav(g.Group("/dav"))
-	S3(g.Group("/s3"))
-	MCP(g)
 
 	downloadLimiter := middlewares.DownloadRateLimiter(stream.ClientDownloadLimit)
 	signCheck := middlewares.Down(sign.Verify)
@@ -50,7 +45,7 @@ func Init(e *gin.Engine) {
 	g.HEAD("/d/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, handles.Down)
 	g.HEAD("/p/*path", middlewares.PathParse, downloadAuth, signCheck, middlewares.UserPathAccess, handles.Proxy)
 	api := g.Group("/api")
-	auth := api.Group("", middlewares.Auth(false))
+	auth := api.Group("", middlewares.Auth())
 	webauthn := api.Group("/authn", middlewares.Authn)
 
 	api.POST("/auth/login", handles.Login)
@@ -58,9 +53,6 @@ func Init(e *gin.Engine) {
 	api.POST("/auth/login/ldap", handles.LoginLdap)
 	auth.GET("/me", handles.CurrentUser)
 	auth.POST("/me/update", handles.UpdateCurrent)
-	auth.GET("/me/sshkey/list", handles.ListMyPublicKey)
-	auth.POST("/me/sshkey/add", handles.AddMyPublicKey)
-	auth.POST("/me/sshkey/delete", handles.DeleteMyPublicKey)
 	auth.POST("/auth/2fa/generate", handles.Generate2FA)
 	auth.POST("/auth/2fa/verify", handles.Verify2FA)
 	auth.GET("/auth/logout", handles.LogOut)
@@ -85,8 +77,8 @@ func Init(e *gin.Engine) {
 	public.Any("/archive_extensions", handles.ArchiveExtensions)
 
 	_fs(auth.Group("/fs"))
-	fsRead(api.Group("/fs", middlewares.Auth(false)))
-	_task(auth.Group("/task", middlewares.AuthNotGuest))
+	fsRead(api.Group("/fs", middlewares.Auth()))
+	_task(auth.Group("/task"))
 	admin(auth.Group("/admin", middlewares.AuthAdmin))
 	if flags.Debug || flags.Dev {
 		debug(g.Group("/debug"))
@@ -112,8 +104,6 @@ func admin(g *gin.RouterGroup) {
 	user.POST("/cancel_2fa", handles.Cancel2FAById)
 	user.POST("/delete", handles.DeleteUser)
 	user.POST("/del_cache", handles.DelUserCache)
-	user.GET("/sshkey/list", handles.ListPublicKeys)
-	user.POST("/sshkey/delete", handles.DeletePublicKey)
 
 	storage := g.Group("/storage")
 	storage.GET("/list", handles.ListStorages)
@@ -196,9 +186,4 @@ func Cors(r *gin.Engine) {
 	config.AllowHeaders = conf.Conf.Cors.AllowHeaders
 	config.AllowMethods = conf.Conf.Cors.AllowMethods
 	r.Use(cors.New(config))
-}
-
-func InitS3(e *gin.Engine) {
-	Cors(e)
-	S3Server(e.Group("/"))
 }

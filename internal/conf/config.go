@@ -20,14 +20,9 @@ type Meilisearch struct {
 type Scheme struct {
 	Address      string `json:"address" env:"ADDR"`
 	HttpPort     int    `json:"http_port" env:"HTTP_PORT"`
-	HttpsPort    int    `json:"https_port" env:"HTTPS_PORT"`
-	ForceHttps   bool   `json:"force_https" env:"FORCE_HTTPS"`
-	CertFile     string `json:"cert_file" env:"CERT_FILE"`
-	KeyFile      string `json:"key_file" env:"KEY_FILE"`
 	UnixFile     string `json:"unix_file" env:"UNIX_FILE"`
 	UnixFilePerm string `json:"unix_file_perm" env:"UNIX_FILE_PERM"`
 	EnableH2c    bool   `json:"enable_h2c" env:"ENABLE_H2C"`
-	EnableH3     bool   `json:"enable_h3" env:"ENABLE_H3"`
 }
 
 type LogConfig struct {
@@ -72,34 +67,6 @@ type Cors struct {
 	AllowHeaders []string `json:"allow_headers" env:"ALLOW_HEADERS"`
 }
 
-type S3 struct {
-	Enable bool `json:"enable" env:"ENABLE"`
-	Port   int  `json:"port" env:"PORT"`
-	SSL    bool `json:"ssl" env:"SSL"`
-}
-
-type FTP struct {
-	Enable                  bool   `json:"enable" env:"ENABLE"`
-	Listen                  string `json:"listen" env:"LISTEN"`
-	FindPasvPortAttempts    int    `json:"find_pasv_port_attempts" env:"FIND_PASV_PORT_ATTEMPTS"`
-	ActiveTransferPortNon20 bool   `json:"active_transfer_port_non_20" env:"ACTIVE_TRANSFER_PORT_NON_20"`
-	IdleTimeout             int    `json:"idle_timeout" env:"IDLE_TIMEOUT"`
-	ConnectionTimeout       int    `json:"connection_timeout" env:"CONNECTION_TIMEOUT"`
-	DisableActiveMode       bool   `json:"disable_active_mode" env:"DISABLE_ACTIVE_MODE"`
-	DefaultTransferBinary   bool   `json:"default_transfer_binary" env:"DEFAULT_TRANSFER_BINARY"`
-	EnableActiveConnIPCheck bool   `json:"enable_active_conn_ip_check" env:"ENABLE_ACTIVE_CONN_IP_CHECK"`
-	EnablePasvConnIPCheck   bool   `json:"enable_pasv_conn_ip_check" env:"ENABLE_PASV_CONN_IP_CHECK"`
-}
-
-type SFTP struct {
-	Enable bool   `json:"enable" env:"ENABLE"`
-	Listen string `json:"listen" env:"LISTEN"`
-}
-
-type MCP struct {
-	Enable bool `json:"enable" env:"ENABLE"`
-}
-
 type Config struct {
 	Force                 bool        `json:"force" env:"FORCE"`
 	SiteURL               string      `json:"site_url" env:"SITE_URL"`
@@ -122,10 +89,6 @@ type Config struct {
 	TlsInsecureSkipVerify bool        `json:"tls_insecure_skip_verify" env:"TLS_INSECURE_SKIP_VERIFY"`
 	Tasks                 TasksConfig `json:"tasks" envPrefix:"TASKS_"`
 	Cors                  Cors        `json:"cors" envPrefix:"CORS_"`
-	S3                    S3          `json:"s3" envPrefix:"S3_"`
-	FTP                   FTP         `json:"ftp" envPrefix:"FTP_"`
-	SFTP                  SFTP        `json:"sftp" envPrefix:"SFTP_"`
-	MCP                   MCP         `json:"mcp" envPrefix:"MCP_"`
 	LastLaunchedVersion   string      `json:"last_launched_version"`
 	ProxyAddress          string      `json:"proxy_address" env:"PROXY_ADDRESS"`
 }
@@ -137,13 +100,9 @@ func DefaultConfig(dataDir string) *Config {
 	dbPath := filepath.Join(dataDir, "data.db")
 	return &Config{
 		Scheme: Scheme{
-			Address:    "0.0.0.0",
-			UnixFile:   "",
-			HttpPort:   5244,
-			HttpsPort:  -1,
-			ForceHttps: false,
-			CertFile:   "",
-			KeyFile:    "",
+			Address:  "0.0.0.0",
+			UnixFile: "",
+			HttpPort: 5244,
 		},
 		JwtSecret:      random.String(16),
 		TokenExpiresIn: 48,
@@ -205,30 +164,6 @@ func DefaultConfig(dataDir string) *Config {
 			AllowOrigins: []string{"*"},
 			AllowMethods: []string{"*"},
 			AllowHeaders: []string{"*"},
-		},
-		S3: S3{
-			Enable: false,
-			Port:   5246,
-			SSL:    false,
-		},
-		FTP: FTP{
-			Enable:                  false,
-			Listen:                  ":5221",
-			FindPasvPortAttempts:    50,
-			ActiveTransferPortNon20: false,
-			IdleTimeout:             900,
-			ConnectionTimeout:       30,
-			DisableActiveMode:       false,
-			DefaultTransferBinary:   false,
-			EnableActiveConnIPCheck: true,
-			EnablePasvConnIPCheck:   true,
-		},
-		SFTP: SFTP{
-			Enable: false,
-			Listen: ":5222",
-		},
-		MCP: MCP{
-			Enable: false,
 		},
 		LastLaunchedVersion: "",
 		ProxyAddress:        "",

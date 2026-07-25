@@ -56,7 +56,7 @@ func loginHash(c *gin.Context, req *LoginReq) {
 		model.LoginCache.Set(ip, count+1)
 		return
 	}
-	if user.Disabled || user.IsGuest() {
+	if user.Disabled {
 		common.ErrorStrResp(c, model.InvalidUsernameOrPassword, 401)
 		model.LoginCache.Set(ip, count+1)
 		return
@@ -91,8 +91,7 @@ type UserResp struct {
 	Otp bool `json:"otp"`
 }
 
-// CurrentUser get current user by token
-// if token is empty, return guest user
+// CurrentUser gets the current user from the authenticated request.
 func CurrentUser(c *gin.Context) {
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
 	userResp := UserResp{
@@ -112,10 +111,6 @@ func UpdateCurrent(c *gin.Context) {
 		return
 	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() {
-		common.ErrorStrResp(c, model.GuestCannotUpdateProfile, 403)
-		return
-	}
 	user.Username = req.Username
 	if req.Password != "" {
 		user.SetPassword(req.Password)
@@ -130,10 +125,6 @@ func UpdateCurrent(c *gin.Context) {
 
 func Generate2FA(c *gin.Context) {
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() {
-		common.ErrorStrResp(c, model.GuestCannotGenerate2FA, 403)
-		return
-	}
 	key, err := totp.Generate(totp.GenerateOpts{
 		Issuer:      "TinyList",
 		AccountName: user.Username,
@@ -169,10 +160,6 @@ func Verify2FA(c *gin.Context) {
 		return
 	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() {
-		common.ErrorStrResp(c, model.GuestCannotGenerate2FA, 403)
-		return
-	}
 	if !totp.Validate(req.Code, req.Secret) {
 		common.ErrorStrResp(c, model.Invalid2FACode, 400)
 		return

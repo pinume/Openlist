@@ -86,6 +86,5 @@ func whetherHide(user *model.User, meta *model.Meta, path string) bool {
 	if !common.MetaCoversPath(meta.Path, path, meta.HSub) {
 		return false
 	}
-	// if is guest, hide
 	return true
 }

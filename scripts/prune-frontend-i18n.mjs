@@ -69,6 +69,7 @@ await writeJSON("home.json", home)
 
 const login = await readJSON("login.json")
 login.title = "登录到 TinyList"
+delete login.use_guest
 await writeJSON("login.json", login)
 
 const manage = await readJSON("manage.json")
@@ -84,7 +85,9 @@ await writeJSON("manage.json", manage)
 const settings = await readJSON("settings.json")
 for (const key of Object.keys(settings)) {
   if (
-    /^(?:aria2|offline_download|qbittorrent|transmission|share_)/i.test(key) ||
+    /^(?:aria2|offline_download|qbittorrent|transmission|share_|ftp_|sftp_|s3_)/i.test(
+      key,
+    ) ||
     /^(?:audio_cover|audio_autoplay|video_autoplay|external_previews|iframe_previews|preview_|readme_autorender|filter_readme_scripts)$/i.test(
       key,
     ) ||
@@ -117,7 +120,12 @@ deleteKeys(users.permissions, [
   "offline_download",
   "share",
   "customize_share_id",
+  "ftp_read",
+  "ftp_manage",
 ])
+delete users["guest-tips"]
+delete users.modify_nothing
+delete users.ssh_keys
 await writeJSON("users.json", users)
 
 for (const name of ["br.json", "indexes.json", "shares.json"]) {
@@ -132,7 +140,7 @@ entry = entry
 await writeFile(entryPath, entry)
 
 const forbidden =
-  /aria2|offline_download|qbittorrent|transmission|batch_download|playlist_download|copy_link/i
+  /aria2|offline_download|qbittorrent|transmission|batch_download|playlist_download|copy_link|use_guest|guest-tips|ftp_read|ftp_manage|ssh_keys|s3_buckets/i
 for (const name of await readdir(langDir)) {
   if (!name.endsWith(".json") && name !== "entry.ts") {
     continue

@@ -15,6 +15,12 @@ import (
 )
 
 func initUser() {
+	if err := db.DeleteUsersByRole(1); err != nil {
+		utils.Log.Fatalf("[init user] Failed to remove legacy guest user: %v", err)
+	}
+	if err := db.ClearUserPermissionBits((1 << 10) | (1 << 11)); err != nil {
+		utils.Log.Fatalf("[init user] Failed to clear removed FTP permissions: %v", err)
+	}
 	admin, err := op.GetAdmin()
 	adminPassword := random.String(8)
 	envpass := os.Getenv("OPENLIST_ADMIN_PASSWORD")
@@ -45,27 +51,6 @@ func initUser() {
 			}
 		} else {
 			utils.Log.Fatalf("[init user] Failed to get admin user: %v", err)
-		}
-	}
-	_, err = op.GetGuest()
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			salt := random.String(16)
-			guest := &model.User{
-				Username:   "guest",
-				PwdHash:    model.TwoHashPwd("guest", salt),
-				Salt:       salt,
-				Role:       model.GUEST,
-				BasePath:   "/",
-				Permission: 0,
-				Disabled:   true,
-				Authn:      "[]",
-			}
-			if err := db.CreateUser(guest); err != nil {
-				utils.Log.Fatalf("[init user] Failed to create guest user: %v", err)
-			}
-		} else {
-			utils.Log.Fatalf("[init user] Failed to get guest user: %v", err)
 		}
 	}
 }

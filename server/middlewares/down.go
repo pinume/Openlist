@@ -28,7 +28,7 @@ func PathParse(c *gin.Context) {
 // stored by the frontend, so the path-bound signature acts as the credential
 // for that download only.
 func DownloadAuth(verifyFunc func(string, string) error) gin.HandlerFunc {
-	auth := Auth(false)
+	auth := Auth()
 	return func(c *gin.Context) {
 		rawPath, ok := c.Request.Context().Value(conf.PathKey).(string)
 		if !ok {

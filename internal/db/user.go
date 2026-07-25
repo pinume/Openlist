@@ -7,6 +7,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pkg/errors"
+	"gorm.io/gorm"
 )
 
 func GetUserByRole(role int) (*model.User, error) {
@@ -62,6 +63,16 @@ func GetUsers(pageIndex, pageSize int) (users []model.User, count int64, err err
 
 func DeleteUserById(id uint) error {
 	return errors.WithStack(db.Delete(&model.User{}, id).Error)
+}
+
+func DeleteUsersByRole(role int) error {
+	return errors.WithStack(db.Where("role = ?", role).Delete(&model.User{}).Error)
+}
+
+func ClearUserPermissionBits(mask int32) error {
+	return errors.WithStack(db.Model(&model.User{}).
+		Where("1 = 1").
+		Update("permission", gorm.Expr("permission & ?", ^mask)).Error)
 }
 
 func UpdateAuthn(userID uint, authn string) error {

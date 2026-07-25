@@ -66,7 +66,7 @@ func ParseToken(tokenString string) (*UserClaims, error) {
 
 func InvalidateToken(tokenString string) error {
 	if tokenString == "" {
-		return nil // don't invalidate empty guest token
+		return nil
 	}
 	validTokenCache.Del(tokenString)
 	return nil

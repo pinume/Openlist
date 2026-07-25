@@ -9,7 +9,6 @@ import (
 )
 
 var userG singleflight.Group[*model.User]
-var guestUser *model.User
 var adminUser *model.User
 
 func GetAdmin() (*model.User, error) {
@@ -21,21 +20,6 @@ func GetAdmin() (*model.User, error) {
 		adminUser = user
 	}
 	return adminUser, nil
-}
-
-func GetGuest() (*model.User, error) {
-	if guestUser == nil {
-		user, err := db.GetUserByRole(model.GUEST)
-		if err != nil {
-			return nil, err
-		}
-		guestUser = user
-	}
-	return guestUser, nil
-}
-
-func GetUserByRole(role int) (*model.User, error) {
-	return db.GetUserByRole(role)
 }
 
 func GetUserByName(username string) (*model.User, error) {
@@ -74,8 +58,8 @@ func DeleteUserById(id uint) error {
 	if err != nil {
 		return err
 	}
-	if old.IsAdmin() || old.IsGuest() {
-		return errs.DeleteAdminOrGuest
+	if old.IsAdmin() {
+		return errs.DeleteAdmin
 	}
 	Cache.DeleteUser(old.Username)
 	return db.DeleteUserById(id)
@@ -88,9 +72,6 @@ func UpdateUser(u *model.User) error {
 	}
 	if u.IsAdmin() {
 		adminUser = nil
-	}
-	if u.IsGuest() {
-		guestUser = nil
 	}
 	Cache.DeleteUser(old.Username)
 	u.BasePath = utils.FixAndCleanPath(u.BasePath)
@@ -117,9 +98,6 @@ func DelUserCache(username string) error {
 	}
 	if user.IsAdmin() {
 		adminUser = nil
-	}
-	if user.IsGuest() {
-		guestUser = nil
 	}
 	Cache.DeleteUser(username)
 	return nil

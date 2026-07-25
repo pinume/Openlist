@@ -13,8 +13,7 @@ import (
 )
 
 // Auth is a middleware that checks if the user is logged in.
-// The boolean parameter is kept for source compatibility and no longer enables guest access.
-func Auth(_ bool) func(c *gin.Context) {
+func Auth() func(c *gin.Context) {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
 		if token == "" {
@@ -108,16 +107,6 @@ func Authn(c *gin.Context) {
 	common.GinAppendValues(c, conf.UserKey, user)
 	log.Debugf("use login token: %+v", user)
 	c.Next()
-}
-
-func AuthNotGuest(c *gin.Context) {
-	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() {
-		common.ErrorStrResp(c, "You are a guest", 403)
-		c.Abort()
-	} else {
-		c.Next()
-	}
 }
 
 func AuthAdmin(c *gin.Context) {

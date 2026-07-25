@@ -25,14 +25,11 @@ func DelUserCacheOnline(username string) {
 	client := resty.New().SetTimeout(1 * time.Second).SetTLSClientConfig(&tls.Config{InsecureSkipVerify: conf.Conf.TlsInsecureSkipVerify})
 	token := setting.GetStr(conf.Token)
 	port := conf.Conf.Scheme.HttpPort
-	u := fmt.Sprintf("http://localhost:%d/api/admin/user/del_cache", port)
 	if port == -1 {
-		if conf.Conf.Scheme.HttpsPort == -1 {
-			utils.Log.Warnf("[del_user_cache] no open port")
-			return
-		}
-		u = fmt.Sprintf("https://localhost:%d/api/admin/user/del_cache", conf.Conf.Scheme.HttpsPort)
+		utils.Log.Warnf("[del_user_cache] no open port")
+		return
 	}
+	u := fmt.Sprintf("http://localhost:%d/api/admin/user/del_cache", port)
 	res, err := client.R().SetHeader("Authorization", token).SetQueryParam("username", username).Post(u)
 	if err != nil {
 		utils.Log.Warnf("[del_user_cache_online] failed: %+v", err)

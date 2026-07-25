@@ -71,3 +71,11 @@ func initialSettingsForTest(t *testing.T) []model.SettingItem {
 	})
 	return InitialSettings()
 }
+
+func TestRemovedServiceSettingsAreAbsent(t *testing.T) {
+	for _, item := range initialSettingsForTest(t) {
+		if _, exists := removedServiceSettingKeys[item.Key]; exists {
+			t.Errorf("removed service setting %q remains", item.Key)
+		}
+	}
+}

@@ -65,10 +65,6 @@ func FsListSplit(c *gin.Context) {
 	}
 	req.Validate()
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() && user.Disabled {
-		common.ErrorStrResp(c, "Guest user is disabled, login please", 401)
-		return
-	}
 	FsList(c, &req, user)
 }
 
@@ -95,7 +91,7 @@ func FsList(c *gin.Context, req *ListReq, user *model.User) {
 	}
 	objs, err := fs.List(c.Request.Context(), reqPath, &fs.ListArgs{
 		Refresh:            req.Refresh,
-		WithStorageDetails: !user.IsGuest() && !setting.GetBool(conf.HideStorageDetails),
+		WithStorageDetails: !setting.GetBool(conf.HideStorageDetails),
 	})
 	if err != nil {
 		common.ErrorResp(c, err, 500)
@@ -263,10 +259,6 @@ func FsGetSplit(c *gin.Context) {
 		return
 	}
 	user := c.Request.Context().Value(conf.UserKey).(*model.User)
-	if user.IsGuest() && user.Disabled {
-		common.ErrorStrResp(c, "Guest user is disabled, login please", 401)
-		return
-	}
 	FsGet(c, &req, user)
 }
 
@@ -287,7 +279,7 @@ func FsGet(c *gin.Context, req *FsGetReq, user *model.User) {
 		return
 	}
 	obj, err := fs.Get(c.Request.Context(), reqPath, &fs.GetArgs{
-		WithStorageDetails: !user.IsGuest() && !setting.GetBool(conf.HideStorageDetails),
+		WithStorageDetails: !setting.GetBool(conf.HideStorageDetails),
 	})
 	if err != nil {
 		common.ErrorResp(c, err, 500)

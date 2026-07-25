@@ -41,6 +41,16 @@ if [[ -d internal/fuse ]] ||
   echo "Removed FUSE/Crypt support is still present." >&2
   exit 1
 fi
+if find server -type f \
+  \( -path 'server/ftp/*' -o -path 'server/sftp/*' \
+  -o -path 'server/s3/*' -o -path 'server/mcp/*' \) |
+  grep -q . ||
+  grep -Eq -- \
+    "github.com/(OpenListTeam/sftpd-openlist|fclairamb/ftpserverlib|itsHenry35/gofakes3)" \
+    go.mod; then
+  echo "Removed FTP, SFTP, S3, or MCP support is still present." >&2
+  exit 1
+fi
 
 go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox
 

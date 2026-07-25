@@ -38,6 +38,8 @@ git -C "$work_root/frontend" apply "$repo_root/frontend-manual-download.patch"
 git -C "$work_root/frontend" apply "$repo_root/frontend-header-logo.patch"
 git -C "$work_root/frontend" apply \
   "$repo_root/frontend-download-options-removal.patch"
+git -C "$work_root/frontend" apply \
+  "$repo_root/frontend-service-removal.patch"
 
 find "$work_root/frontend/src/pages/home/previews" -depth -delete
 find "$work_root/frontend/src/components/artplayer-plugin-ass" -depth -delete
@@ -55,6 +57,13 @@ rm -f \
   "$work_root/frontend/src/pages/home/file/open-with.tsx" \
   "$work_root/frontend/src/pages/home/folder/ImageItem.tsx" \
   "$work_root/frontend/src/pages/home/folder/Images.tsx"
+rm -f \
+  "$work_root/frontend/src/pages/manage/settings/S3.tsx" \
+  "$work_root/frontend/src/pages/manage/settings/S3BucketItem.tsx" \
+  "$work_root/frontend/src/pages/manage/settings/S3Buckets.tsx" \
+  "$work_root/frontend/src/pages/manage/users/PublicKey.tsx" \
+  "$work_root/frontend/src/pages/manage/users/PublicKeys.tsx" \
+  "$work_root/frontend/src/types/sshkey.ts"
 
 curl -fsSL "$i18n_url" -o "$work_root/i18n.tar.gz"
 printf '%s  %s\n' "$i18n_sha256" "$work_root/i18n.tar.gz" | sha256sum --check -
@@ -82,6 +91,9 @@ find "$work_root/frontend/src/lang/en" -depth -delete
       dist/assets/*.js ||
     LC_ALL=C grep -Eqi -- \
       "batch_download|playlist_download|copy_link|#EXTM3U" \
+      dist/assets/*.js ||
+    LC_ALL=C grep -Eqi -- \
+      "guest-tips|ftp_read|ftp_manage|ssh_keys|s3_buckets|use_guest" \
       dist/assets/*.js; then
     echo "Removed feature code was found in the frontend build." >&2
     LC_ALL=C grep -Ril -- "aria2" dist >&2 || true
@@ -93,6 +105,10 @@ find "$work_root/frontend/src/lang/en" -depth -delete
       dist/assets/*.js >&2 || true
     LC_ALL=C grep -Eil -- \
       "batch_download|playlist_download|copy_link|#EXTM3U" \
+      dist/assets/*.js \
+      >&2 || true
+    LC_ALL=C grep -Eil -- \
+      "guest-tips|ftp_read|ftp_manage|ssh_keys|s3_buckets|use_guest" \
       dist/assets/*.js \
       >&2 || true
     exit 1

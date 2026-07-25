@@ -45,7 +45,7 @@ func TestWhetherHide(t *testing.T) {
 		{
 			name: "nil meta",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta:   nil,
 			path:   "/folder",
@@ -55,7 +55,7 @@ func TestWhetherHide(t *testing.T) {
 		{
 			name: "empty hide string",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta: &model.Meta{
 				Path: "/folder",
@@ -69,7 +69,7 @@ func TestWhetherHide(t *testing.T) {
 		{
 			name: "exact path match with HSub=false",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta: &model.Meta{
 				Path: "/folder",
@@ -78,12 +78,12 @@ func TestWhetherHide(t *testing.T) {
 			},
 			path:   "/folder",
 			want:   true,
-			reason: "exact path match should hide for guest",
+			reason: "exact path match should hide for a user without permission",
 		},
 		{
 			name: "sub path with HSub=true",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta: &model.Meta{
 				Path: "/folder",
@@ -92,12 +92,12 @@ func TestWhetherHide(t *testing.T) {
 			},
 			path:   "/folder/subfolder",
 			want:   true,
-			reason: "sub path with HSub=true should hide for guest",
+			reason: "sub path with HSub=true should hide for a user without permission",
 		},
 		{
 			name: "sub path with HSub=false",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta: &model.Meta{
 				Path: "/folder",
@@ -111,7 +111,7 @@ func TestWhetherHide(t *testing.T) {
 		{
 			name: "non-sub path with HSub=true",
 			user: &model.User{
-				Role: model.GUEST,
+				Role: model.GENERAL,
 			},
 			meta: &model.Meta{
 				Path: "/folder",

@@ -86,20 +86,6 @@ const (
 	LdapDefaultDir        = "ldap_default_dir"
 	LdapLoginTips         = "ldap_login_tips"
 
-	// s3
-	S3Buckets         = "s3_buckets"
-	S3AccessKeyId     = "s3_access_key_id"
-	S3SecretAccessKey = "s3_secret_access_key"
-
-	// ftp
-	FTPPublicHost            = "ftp_public_host"
-	FTPPasvPortMap           = "ftp_pasv_port_map"
-	FTPMandatoryTLS          = "ftp_mandatory_tls"
-	FTPImplicitTLS           = "ftp_implicit_tls"
-	FTPTLSPrivateKeyPath     = "ftp_tls_private_key_path"
-	FTPTLSPublicCertPath     = "ftp_tls_public_cert_path"
-	SFTPDisablePasswordLogin = "sftp_disable_password_login"
-
 	// traffic
 	TaskUploadThreadsNum             = "upload_task_threads_num"
 	TaskCopyThreadsNum               = "copy_task_threads_num"

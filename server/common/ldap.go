@@ -79,7 +79,7 @@ func LdapRegister(username string) (*model.User, error) {
 		Authn:      "[]",
 		Permission: int32(setting.GetInt(conf.LdapDefaultPermission, 0)),
 		BasePath:   setting.GetStr(conf.LdapDefaultDir),
-		Role:       0,
+		Role:       model.GENERAL,
 		Disabled:   false,
 		AllowLdap:  true,
 	}

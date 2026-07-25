@@ -32,7 +32,7 @@ To keep your OpenList instance secure:
 
 - Always update to the latest release.
 - Use a strong, unique admin password and change it after first login.
-- Enable HTTPS (TLS) for your deployment — do **not** expose OpenList over plain HTTP on the public internet.
+- Terminate HTTPS (TLS) at a reverse proxy such as Nginx or Caddy — do **not** expose TinyList's plain HTTP listener directly to the public internet.
 - Limit exposed ports using a reverse proxy (e.g., Nginx, Caddy).
 - Set up access controls and avoid enabling guest access unless necessary.
 - Regularly review mounted storage permissions and revoke unused API tokens.
@@ -77,7 +77,7 @@ We sincerely thank all security researchers and community members who responsibl
 
 - 始终更新至最新版本。
 - 使用强且唯一的管理员密码，并在首次登录后立即修改。
-- 为您的部署启用 HTTPS（TLS）—— **请勿**在公网上以明文 HTTP 方式暴露 OpenList。
+- 使用 Nginx 或 Caddy 等反向代理提供 HTTPS（TLS）——**请勿**将 TinyList 的明文 HTTP 监听端口直接暴露到公网。
 - 使用反向代理（如 Nginx、Caddy）限制对外暴露的端口。
 - 配置访问控制，非必要情况下不要开启访客访问。
 - 定期检查已挂载存储的权限，并撤销未使用的 API 令牌。
