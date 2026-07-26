@@ -130,7 +130,12 @@ func tryLogin(username, password string) (*model.User, bool) {
 	user, err := op.GetUserByName(username)
 	if err == nil {
 		err = user.ValidateRawPassword(password)
-		if err != nil && setting.GetBool(conf.LdapLoginEnabled) && user.AllowLdap {
+		if err == nil && user.NeedsPasswordRehash() {
+			migrated := *user
+			migrated.RehashPasswordStaticHash(model.StaticHash(password))
+			err = op.UpdateUser(&migrated)
+			user = &migrated
+		} else if err != nil && setting.GetBool(conf.LdapLoginEnabled) && user.AllowLdap {
 			err = common.HandleLdapLogin(username, password)
 		}
 	} else if setting.GetBool(conf.LdapLoginEnabled) && model.CanWebdavRead(int32(setting.GetInt(conf.LdapDefaultPermission, 0))) {

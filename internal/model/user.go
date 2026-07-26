@@ -1,9 +1,12 @@
 package model
 
 import (
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/errs"
@@ -12,6 +15,7 @@ import (
 	"github.com/OpenListTeam/go-cache"
 	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pkg/errors"
+	"golang.org/x/crypto/argon2"
 )
 
 const (
@@ -25,6 +29,14 @@ const (
 	InvalidUsernameOrPassword = "Invalid username or password"
 	Invalid2FACode            = "Invalid 2FA code"
 	TooManyAttempts           = "Too many unsuccessful sign-in attempts have been made using an incorrect username or password, Try again later."
+)
+
+const (
+	argon2Memory      = 19 * 1024
+	argon2Iterations  = 2
+	argon2Parallelism = 1
+	argon2KeyLength   = 32
+	argon2Prefix      = "$argon2id$v=19$m=19456,t=2,p=1$"
 )
 
 var LoginCache = cache.NewMemCache[int]()
@@ -77,17 +89,38 @@ func (u *User) ValidatePwdStaticHash(pwdStaticHash string) error {
 	if pwdStaticHash == "" {
 		return errors.WithStack(errs.EmptyPassword)
 	}
-	if u.PwdHash != HashPwd(pwdStaticHash, u.Salt) {
+	if strings.HasPrefix(u.PwdHash, "$argon2id$") {
+		if !validateArgon2Hash(pwdStaticHash, u.PwdHash) {
+			return errors.WithStack(errs.WrongPassword)
+		}
+		return nil
+	}
+	if subtle.ConstantTimeCompare([]byte(u.PwdHash), []byte(HashPwd(pwdStaticHash, u.Salt))) != 1 {
 		return errors.WithStack(errs.WrongPassword)
 	}
 	return nil
 }
 
 func (u *User) SetPassword(pwd string) *User {
+	return u.SetPasswordStaticHash(StaticHash(pwd))
+}
+
+func (u *User) SetPasswordStaticHash(pwdStaticHash string) *User {
 	u.Salt = random.String(16)
-	u.PwdHash = TwoHashPwd(pwd, u.Salt)
+	u.PwdHash = encodeArgon2Hash(pwdStaticHash, u.Salt)
 	u.PwdTS = time.Now().Unix()
 	return u
+}
+
+func (u *User) RehashPasswordStaticHash(pwdStaticHash string) *User {
+	passwordTimestamp := u.PwdTS
+	u.SetPasswordStaticHash(pwdStaticHash)
+	u.PwdTS = passwordTimestamp
+	return u
+}
+
+func (u *User) NeedsPasswordRehash() bool {
+	return !strings.HasPrefix(u.PwdHash, argon2Prefix)
 }
 
 func CanSeeHides(permission int32) bool {
@@ -192,6 +225,48 @@ func HashPwd(static string, salt string) string {
 
 func TwoHashPwd(password string, salt string) string {
 	return HashPwd(StaticHash(password), salt)
+}
+
+func encodeArgon2Hash(pwdStaticHash, salt string) string {
+	hash := argon2.IDKey(
+		[]byte(pwdStaticHash),
+		[]byte(salt),
+		argon2Iterations,
+		argon2Memory,
+		argon2Parallelism,
+		argon2KeyLength,
+	)
+	return argon2Prefix +
+		base64.RawStdEncoding.EncodeToString([]byte(salt)) + "$" +
+		base64.RawStdEncoding.EncodeToString(hash)
+}
+
+func validateArgon2Hash(pwdStaticHash, encoded string) bool {
+	payload, ok := strings.CutPrefix(encoded, argon2Prefix)
+	if !ok {
+		return false
+	}
+	saltEncoded, hashEncoded, ok := strings.Cut(payload, "$")
+	if !ok {
+		return false
+	}
+	salt, err := base64.RawStdEncoding.DecodeString(saltEncoded)
+	if err != nil || len(salt) < 16 {
+		return false
+	}
+	expected, err := base64.RawStdEncoding.DecodeString(hashEncoded)
+	if err != nil || len(expected) != argon2KeyLength {
+		return false
+	}
+	actual := argon2.IDKey(
+		[]byte(pwdStaticHash),
+		salt,
+		argon2Iterations,
+		argon2Memory,
+		argon2Parallelism,
+		argon2KeyLength,
+	)
+	return subtle.ConstantTimeCompare(actual, expected) == 1
 }
 
 func (u *User) WebAuthnID() []byte {

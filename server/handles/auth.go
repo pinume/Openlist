@@ -75,6 +75,15 @@ func loginHash(c *gin.Context, req *LoginReq) {
 			return
 		}
 	}
+	if user.NeedsPasswordRehash() {
+		migrated := *user
+		migrated.RehashPasswordStaticHash(req.Password)
+		if err := op.UpdateUser(&migrated); err != nil {
+			common.ErrorResp(c, err, 500, true)
+			return
+		}
+		user = &migrated
+	}
 	// generate token
 	token, err := common.GenerateToken(user)
 	if err != nil {

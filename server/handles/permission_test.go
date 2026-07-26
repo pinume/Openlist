@@ -12,6 +12,7 @@ import (
 	"github.com/OpenListTeam/OpenList/v4/internal/db"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
+	"github.com/OpenListTeam/OpenList/v4/server/common"
 	"github.com/gin-gonic/gin"
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
@@ -22,6 +23,7 @@ var permissionTestDBOnce sync.Once
 func setupPermissionTestDB(t *testing.T) {
 	t.Helper()
 	permissionTestDBOnce.Do(func() {
+		conf.Conf = conf.DefaultConfig("data")
 		testDB, err := gorm.Open(sqlite.Open("file:handles_permission?mode=memory&cache=shared"))
 		if err != nil {
 			t.Fatalf("open permission test database: %v", err)
@@ -38,6 +40,44 @@ func testContext(t *testing.T, body string, user *model.User) (*gin.Context, *ht
 	req.Header.Set("Content-Type", "application/json")
 	c.Request = req.WithContext(context.WithValue(req.Context(), conf.UserKey, user))
 	return c, recorder
+}
+
+func TestLoginMigratesLegacyPasswordHash(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	setupPermissionTestDB(t)
+	const password = "legacy login password"
+	staticHash := model.StaticHash(password)
+	user := &model.User{
+		Username: "legacy-login",
+		BasePath: "/",
+		Salt:     "legacy-login-salt",
+		PwdHash:  model.HashPwd(staticHash, "legacy-login-salt"),
+		PwdTS:    1234,
+	}
+	if err := op.CreateUser(user); err != nil {
+		t.Fatalf("create legacy user: %v", err)
+	}
+	common.SecretKey = []byte("login-migration-test-secret")
+
+	c, recorder := testContext(t, `{}`, &model.User{})
+	loginHash(c, &LoginReq{Username: user.Username, Password: staticHash})
+
+	if !strings.Contains(recorder.Body.String(), `"code":200`) {
+		t.Fatalf("expected successful login, got %s", recorder.Body.String())
+	}
+	stored, err := db.GetUserByName(user.Username)
+	if err != nil {
+		t.Fatalf("load migrated user: %v", err)
+	}
+	if stored.NeedsPasswordRehash() {
+		t.Fatal("successful login did not migrate the legacy password hash")
+	}
+	if stored.PwdTS != 1234 {
+		t.Fatalf("password migration changed timestamp to %d", stored.PwdTS)
+	}
+	if err := stored.ValidatePwdStaticHash(staticHash); err != nil {
+		t.Fatalf("migrated password no longer validates: %v", err)
+	}
 }
 
 func TestFsRemoveRejectsRestrictedDescendantMeta(t *testing.T) {

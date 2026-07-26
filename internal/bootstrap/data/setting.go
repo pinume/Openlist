@@ -29,6 +29,7 @@ var removedServiceSettingKeys = map[string]struct{}{
 	"ftp_tls_private_key_path":    {},
 	"ftp_tls_public_cert_path":    {},
 	"sftp_disable_password_login": {},
+	"link_expiration":             {},
 }
 
 func initSettings() {
