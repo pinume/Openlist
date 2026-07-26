@@ -52,6 +52,9 @@ func FsMkdir(c *gin.Context) {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
 	}
+	if !canWritePath(c, user, reqPath) {
+		return
+	}
 	if err := fs.MakeDir(c.Request.Context(), reqPath); err != nil {
 		common.ErrorResp(c, err, 500)
 		return
@@ -124,6 +127,10 @@ func FsMove(c *gin.Context) {
 		if !strings.HasPrefix(srcPath+"/", srcDir) {
 			req.Names[i] = ""
 			continue
+		}
+		if !canWriteTree(c, user, srcPath) ||
+			!canWriteTree(c, user, stdpath.Join(dstDir, stdpath.Base(srcPath))) {
+			return
 		}
 		req.Names[i] = srcPath
 		if !req.Overwrite {
@@ -231,6 +238,10 @@ func FsCopy(c *gin.Context) {
 			req.Names[i] = ""
 			continue
 		}
+		if !canReadTree(c, user, srcPath) ||
+			!canWriteTree(c, user, stdpath.Join(dstDir, stdpath.Base(srcPath))) {
+			return
+		}
 		req.Names[i] = srcPath
 		if !req.Overwrite {
 			base := stdpath.Base(srcPath)
@@ -323,8 +334,11 @@ func FsRename(c *gin.Context) {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
 		return
 	}
+	dstPath := stdpath.Join(parentPath, req.Name)
+	if !canWriteTree(c, user, reqPath) || !canWriteTree(c, user, dstPath) {
+		return
+	}
 	if !req.Overwrite {
-		dstPath := stdpath.Join(stdpath.Dir(reqPath), req.Name)
 		if dstPath != reqPath {
 			if res, _ := fs.Get(c.Request.Context(), dstPath, &fs.GetArgs{NoLog: true}); res != nil {
 				common.ErrorStrResp(c, fmt.Sprintf("file [%s] exists", req.Name), 403)
@@ -393,6 +407,9 @@ func FsRemove(c *gin.Context) {
 			req.Names[i] = ""
 			continue
 		}
+		if !canWriteTree(c, user, fullPath) {
+			return
+		}
 		req.Names[i] = fullPath
 	}
 	for _, path := range req.Names {
@@ -442,6 +459,9 @@ func FsRemoveEmptyDirectory(c *gin.Context) {
 	}
 	if !common.CanWrite(user, meta, srcDir) {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return
+	}
+	if !canWriteTree(c, user, srcDir) {
 		return
 	}
 	common.GinAppendValues(c, conf.MetaKey, meta)

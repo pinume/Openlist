@@ -7,10 +7,12 @@ import (
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
+	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/op"
 	"github.com/OpenListTeam/OpenList/v4/pkg/utils"
 	"github.com/dlclark/regexp2"
+	"github.com/pkg/errors"
 )
 
 func IsStorageSignEnabled(rawPath string) bool {
@@ -38,6 +40,62 @@ func CanWrite(user *model.User, meta *model.Meta, path string) bool {
 		return false
 	}
 	return true
+}
+
+func CanReadPath(user *model.User, path string) (bool, error) {
+	meta, err := op.GetNearestMeta(path)
+	if err != nil {
+		if errors.Is(errors.Cause(err), errs.MetaNotFound) {
+			return CanRead(user, nil, path), nil
+		}
+		return false, err
+	}
+	return CanRead(user, meta, path), nil
+}
+
+func CanWritePath(user *model.User, path string) (bool, error) {
+	meta, err := op.GetNearestMeta(path)
+	if err != nil {
+		if errors.Is(errors.Cause(err), errs.MetaNotFound) {
+			return CanWrite(user, nil, path), nil
+		}
+		return false, err
+	}
+	return CanWrite(user, meta, path), nil
+}
+
+func CanReadTree(user *model.User, root string) (bool, error) {
+	allowed, err := CanReadPath(user, root)
+	if err != nil || !allowed {
+		return allowed, err
+	}
+	metas, _, err := op.GetMetas(1, model.MaxInt)
+	if err != nil {
+		return false, err
+	}
+	for i := range metas {
+		if utils.IsSubPath(root, metas[i].Path) && !CanRead(user, &metas[i], metas[i].Path) {
+			return false, nil
+		}
+	}
+	return true, nil
+}
+
+func CanWriteTree(user *model.User, root string) (bool, error) {
+	allowed, err := CanWritePath(user, root)
+	if err != nil || !allowed {
+		return allowed, err
+	}
+	metas, _, err := op.GetMetas(1, model.MaxInt)
+	if err != nil {
+		return false, err
+	}
+	for i := range metas {
+		if utils.IsSubPath(root, metas[i].Path) && !CanWrite(user, &metas[i], metas[i].Path) {
+			return false, nil
+		}
+	}
+	return true, nil
 }
 
 func CanWriteContentBypassUserPerms(meta *model.Meta, path string) bool {

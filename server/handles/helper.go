@@ -31,6 +31,58 @@ func CurrentUser(c *gin.Context) (*model.User, bool) {
 	return user, true
 }
 
+func canReadPath(c *gin.Context, user *model.User, path string) bool {
+	allowed, err := common.CanReadPath(user, path)
+	if err != nil {
+		common.ErrorResp(c, err, 500, true)
+		return false
+	}
+	if !allowed {
+		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return false
+	}
+	return true
+}
+
+func canWritePath(c *gin.Context, user *model.User, path string) bool {
+	allowed, err := common.CanWritePath(user, path)
+	if err != nil {
+		common.ErrorResp(c, err, 500, true)
+		return false
+	}
+	if !allowed {
+		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return false
+	}
+	return true
+}
+
+func canReadTree(c *gin.Context, user *model.User, path string) bool {
+	allowed, err := common.CanReadTree(user, path)
+	if err != nil {
+		common.ErrorResp(c, err, 500, true)
+		return false
+	}
+	if !allowed {
+		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return false
+	}
+	return true
+}
+
+func canWriteTree(c *gin.Context, user *model.User, path string) bool {
+	allowed, err := common.CanWriteTree(user, path)
+	if err != nil {
+		common.ErrorResp(c, err, 500, true)
+		return false
+	}
+	if !allowed {
+		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return false
+	}
+	return true
+}
+
 // resolveAndAuthorize resolves a user-relative request path and applies the
 // shared meta/password permission check. On failure it writes the response.
 func resolveAndAuthorize(c *gin.Context, user *model.User, reqPath, password string) (string, *model.Meta, bool) {

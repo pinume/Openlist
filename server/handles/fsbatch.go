@@ -2,6 +2,7 @@ package handles
 
 import (
 	"fmt"
+	stdpath "path"
 	"regexp"
 	"slices"
 
@@ -50,6 +51,9 @@ func FsRecursiveMove(c *gin.Context) {
 	}
 	if !common.CanWrite(user, srcMeta, srcDir) {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return
+	}
+	if !canWriteTree(c, user, srcDir) {
 		return
 	}
 	common.GinAppendValues(c, conf.MetaKey, srcMeta)
@@ -138,6 +142,9 @@ func FsRecursiveMove(c *gin.Context) {
 
 	var count = 0
 	for i, fileName := range movingFileNames {
+		if !canWriteTree(c, user, stdpath.Join(dstDir, stdpath.Base(fileName))) {
+			return
+		}
 		// move
 		_, err := fs.Move(c.Request.Context(), fileName, dstDir, len(movingFileNames) > i+1)
 		if err != nil {
@@ -205,6 +212,10 @@ func FsBatchRename(c *gin.Context) {
 			return
 		}
 		filePath := fmt.Sprintf("%s/%s", reqPath, renameObject.SrcName)
+		dstPath := fmt.Sprintf("%s/%s", reqPath, renameObject.NewName)
+		if !canWriteTree(c, user, filePath) || !canWriteTree(c, user, dstPath) {
+			return
+		}
 		if err := fs.Rename(c.Request.Context(), filePath, renameObject.NewName); err != nil {
 			common.ErrorResp(c, err, 500)
 			return
@@ -273,6 +284,10 @@ func FsRegexRename(c *gin.Context) {
 				return
 			}
 			filePath := fmt.Sprintf("%s/%s", reqPath, file.GetName())
+			dstPath := fmt.Sprintf("%s/%s", reqPath, newFileName)
+			if !canWriteTree(c, user, filePath) || !canWriteTree(c, user, dstPath) {
+				return
+			}
 			if err := fs.Rename(c.Request.Context(), filePath, newFileName); err != nil {
 				common.ErrorResp(c, err, 500)
 				return

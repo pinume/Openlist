@@ -47,5 +47,16 @@ func FsUp(c *gin.Context) {
 		c.Abort()
 		return
 	}
+	allowed, err := common.CanWritePath(user, path)
+	if err != nil {
+		common.ErrorResp(c, err, 500, true)
+		c.Abort()
+		return
+	}
+	if !allowed {
+		common.ErrorResp(c, errs.PermissionDenied, 403)
+		c.Abort()
+		return
+	}
 	c.Next()
 }

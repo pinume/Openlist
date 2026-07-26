@@ -23,10 +23,9 @@ func PathParse(c *gin.Context) {
 	c.Next()
 }
 
-// DownloadAuth accepts either a normal authenticated request or a signed
-// download URL. Browser navigations cannot attach the Authorization header
-// stored by the frontend, so the path-bound signature acts as the credential
-// for that download only.
+// DownloadAuth accepts either a normal authenticated request or a short-lived,
+// path-bound download credential. Browser navigations cannot attach the
+// Authorization header stored by the frontend.
 func DownloadAuth(verifyFunc func(string, string) error) gin.HandlerFunc {
 	auth := Auth()
 	return func(c *gin.Context) {

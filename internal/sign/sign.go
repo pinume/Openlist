@@ -11,6 +11,8 @@ import (
 
 var instance atomic.Value
 
+const temporaryDownloadLifetime = 5 * time.Minute
+
 func current() sign.Sign {
 	if signer := instance.Load(); signer != nil {
 		return signer.(sign.Sign)
@@ -20,20 +22,11 @@ func current() sign.Sign {
 }
 
 func Sign(data string) string {
-	expire := setting.GetInt(conf.LinkExpiration, 0)
-	if expire == 0 {
-		return NotExpired(data)
-	} else {
-		return WithDuration(data, time.Duration(expire)*time.Hour)
-	}
+	return withDuration(data, temporaryDownloadLifetime)
 }
 
-func WithDuration(data string, d time.Duration) string {
+func withDuration(data string, d time.Duration) string {
 	return current().Sign(data, time.Now().Add(d).Unix())
-}
-
-func NotExpired(data string) string {
-	return current().Sign(data, 0)
 }
 
 func Verify(data string, sign string) error {

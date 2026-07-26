@@ -172,7 +172,7 @@ func _fs(g *gin.RouterGroup) {
 	g.POST("/link", middlewares.AuthAdmin, handles.Link)
 	g.POST("/archive/decompress", handles.FsArchiveDecompress)
 	// Direct upload (client-side upload to storage)
-	g.POST("/get_direct_upload_info", middlewares.FsUp, handles.FsGetDirectUploadInfo)
+	g.POST("/get_direct_upload_info", handles.FsGetDirectUploadInfo)
 }
 
 func _task(g *gin.RouterGroup) {

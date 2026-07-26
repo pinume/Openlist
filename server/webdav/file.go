@@ -58,6 +58,17 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	if !common.CanWrite(user, srcMeta, srcDir) || !common.CanWrite(user, dstMeta, dstDir) {
 		return http.StatusForbidden, nil
 	}
+	srcAllowed, err := common.CanWriteTree(user, src)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	dstAllowed, err := common.CanWriteTree(user, dst)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !srcAllowed || !dstAllowed {
+		return http.StatusForbidden, nil
+	}
 	if srcDir == dstDir {
 		err = fs.Rename(ctx, src, dstName)
 	} else {
@@ -102,6 +113,17 @@ func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 		return http.StatusInternalServerError, err
 	}
 	if !common.CanWrite(user, dstMeta, dstDir) {
+		return http.StatusForbidden, nil
+	}
+	srcAllowed, err := common.CanReadTree(user, src)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	dstAllowed, err := common.CanWriteTree(user, dst)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !srcAllowed || !dstAllowed {
 		return http.StatusForbidden, nil
 	}
 	_, err = fs.Copy(context.WithValue(ctx, conf.NoTaskKey, struct{}{}), src, dstDir)

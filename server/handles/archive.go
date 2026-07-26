@@ -203,6 +203,9 @@ func FsArchiveDecompress(c *gin.Context) {
 			common.ErrorResp(c, err, 403)
 			return
 		}
+		if !canReadTree(c, user, srcPath) {
+			return
+		}
 		srcPaths = append(srcPaths, srcPath)
 	}
 	dstDir, err := user.JoinPath(req.DstDir)
@@ -217,6 +220,9 @@ func FsArchiveDecompress(c *gin.Context) {
 	}
 	if !common.CanWrite(user, dstMeta, dstDir) {
 		common.ErrorResp(c, errs.PermissionDenied, 403)
+		return
+	}
+	if !canWriteTree(c, user, dstDir) {
 		return
 	}
 	tasks := make([]task.TaskExtensionInfo, 0, len(srcPaths))

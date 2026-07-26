@@ -338,6 +338,13 @@ func (h *Handler) handleDelete(w http.ResponseWriter, r *http.Request) (status i
 	if !common.CanWrite(user, parentMeta, parentPath) {
 		return http.StatusForbidden, errs.PermissionDenied
 	}
+	allowed, err := common.CanWriteTree(user, reqPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !allowed {
+		return http.StatusForbidden, errs.PermissionDenied
+	}
 	if err := fs.Remove(ctx, reqPath); err != nil {
 		return http.StatusMethodNotAllowed, err
 	}
@@ -404,6 +411,13 @@ func (h *Handler) handlePut(w http.ResponseWriter, r *http.Request) (status int,
 		return http.StatusForbidden, errs.PermissionDenied
 	}
 	if !common.CanWrite(user, parentMeta, parentPath) {
+		return http.StatusForbidden, errs.PermissionDenied
+	}
+	allowed, err := common.CanWritePath(user, reqPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !allowed {
 		return http.StatusForbidden, errs.PermissionDenied
 	}
 	fsStream := &stream.FileStream{
@@ -482,6 +496,13 @@ func (h *Handler) handleMkcol(w http.ResponseWriter, r *http.Request) (status in
 		return http.StatusForbidden, errs.PermissionDenied
 	}
 	if !common.CanWrite(user, parentMeta, parentPath) {
+		return http.StatusForbidden, errs.PermissionDenied
+	}
+	allowed, err := common.CanWritePath(user, reqPath)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if !allowed {
 		return http.StatusForbidden, errs.PermissionDenied
 	}
 	if err := fs.MakeDir(ctx, reqPath); err != nil {

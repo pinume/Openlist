@@ -36,7 +36,6 @@ const (
 	HideFiles               = "hide_files"
 	CustomizeHead           = "customize_head"
 	CustomizeBody           = "customize_body"
-	LinkExpiration          = "link_expiration"
 	SignAll                 = "sign_all"
 	PrivacyRegs             = "privacy_regs"
 	OcrApi                  = "ocr_api"
