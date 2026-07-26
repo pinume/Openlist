@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/conf"
@@ -23,8 +24,8 @@ func TestCurrentUser(t *testing.T) {
 		if ok || user != nil {
 			t.Fatal("CurrentUser() accepted a missing user")
 		}
-		if recorder.Code != http.StatusUnauthorized {
-			t.Fatalf("CurrentUser() status = %d, want %d", recorder.Code, http.StatusUnauthorized)
+		if !strings.Contains(recorder.Body.String(), `"code":401`) {
+			t.Fatalf("expected authentication error, got %s", recorder.Body.String())
 		}
 	})
 

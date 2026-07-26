@@ -131,7 +131,7 @@ func FsDirs(c *gin.Context) {
 		}
 		reqPath = tmp
 	}
-	meta, ok := authorizeResolvedPath(c, user, reqPath, req.Password)
+	_, ok = authorizeResolvedPath(c, user, reqPath, req.Password)
 	if !ok {
 		return
 	}

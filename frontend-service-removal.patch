@@ -31,12 +31,11 @@ diff --git a/src/types/user.ts b/src/types/user.ts
 diff --git a/src/types/setting.ts b/src/types/setting.ts
 --- a/src/types/setting.ts
 +++ b/src/types/setting.ts
-@@ -9,9 +9,7 @@ export enum Group {
+@@ -9,8 +9,7 @@ export enum Group {
    INDEX = 6,
    SSO,
    LDAP,
--  S3,
--  FTP,
+-  FTP = 10,
 -  TRAFFIC,
 +  TRAFFIC = 11,
  }
