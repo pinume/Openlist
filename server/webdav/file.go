@@ -6,6 +6,8 @@ package webdav
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"net/http"
 	"path"
 	"path/filepath"
@@ -37,6 +39,9 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	dstDir := path.Dir(dst)
 	srcName := path.Base(src)
 	dstName := path.Base(dst)
+	if slashClean(src) == slashClean(dst) {
+		return http.StatusForbidden, nil
+	}
 	user, ok := common.UserFromContext(ctx)
 	if !ok {
 		return http.StatusUnauthorized, nil
@@ -69,21 +74,20 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	if !srcAllowed || !dstAllowed {
 		return http.StatusForbidden, nil
 	}
-	if srcDir == dstDir {
-		err = fs.Rename(ctx, src, dstName)
-	} else {
-		_, err = fs.Move(context.WithValue(ctx, conf.NoTaskKey, struct{}{}), src, dstDir)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-		if srcName != dstName {
-			err = fs.Rename(ctx, path.Join(dstDir, srcName), dstName)
-		}
+	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite)
+	if status != 0 || err != nil {
+		return status, err
 	}
+	_, err = fs.MoveTo(context.WithValue(ctx, conf.NoTaskKey, struct{}{}), src, dst)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, compensateFailedTransfer(ctx, dst, backupPath, err)
 	}
-	// TODO if there are no files copy, should return 204
+	if cleanupErr := cleanupBackup(ctx, backupPath); cleanupErr != nil {
+		return http.StatusInternalServerError, errors.Wrapf(cleanupErr, "move completed at %s but old destination remains at %s", dst, backupPath)
+	}
+	if existed {
+		return http.StatusNoContent, nil
+	}
 	return http.StatusCreated, nil
 }
 
@@ -94,6 +98,9 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int, err error) {
 	srcDir := path.Dir(src)
 	dstDir := path.Dir(dst)
+	if slashClean(src) == slashClean(dst) {
+		return http.StatusForbidden, nil
+	}
 	user, ok := common.UserFromContext(ctx)
 	if !ok {
 		return http.StatusUnauthorized, nil
@@ -126,12 +133,93 @@ func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	if !srcAllowed || !dstAllowed {
 		return http.StatusForbidden, nil
 	}
-	_, err = fs.Copy(context.WithValue(ctx, conf.NoTaskKey, struct{}{}), src, dstDir)
-	if err != nil {
-		return http.StatusInternalServerError, err
+	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite)
+	if status != 0 || err != nil {
+		return status, err
 	}
-	// TODO if there are no files copy, should return 204
+	_, err = fs.CopyTo(context.WithValue(ctx, conf.NoTaskKey, struct{}{}), src, dst)
+	if err != nil {
+		return http.StatusInternalServerError, compensateFailedTransfer(ctx, dst, backupPath, err)
+	}
+	if cleanupErr := cleanupBackup(ctx, backupPath); cleanupErr != nil {
+		return http.StatusInternalServerError, errors.Wrapf(cleanupErr, "copy completed at %s but old destination remains at %s", dst, backupPath)
+	}
+	if existed {
+		return http.StatusNoContent, nil
+	}
 	return http.StatusCreated, nil
+}
+
+func prepareDestination(ctx context.Context, dst string, overwrite bool) (existed bool, backupPath string, status int, err error) {
+	_, err = fs.Get(ctx, dst, &fs.GetArgs{NoLog: true})
+	if err != nil {
+		if errs.IsObjectNotFound(err) {
+			return false, "", 0, nil
+		}
+		return false, "", http.StatusInternalServerError, err
+	}
+	if !overwrite {
+		return true, "", http.StatusPreconditionFailed, nil
+	}
+	backupPath, err = unusedBackupPath(ctx, dst)
+	if err != nil {
+		return true, "", http.StatusInternalServerError, err
+	}
+	if err = fs.Rename(ctx, dst, path.Base(backupPath)); err != nil {
+		return true, "", http.StatusInternalServerError, errors.Wrapf(err, "failed to preserve existing destination %s", dst)
+	}
+	return true, backupPath, 0, nil
+}
+
+func unusedBackupPath(ctx context.Context, dst string) (string, error) {
+	var randomBytes [8]byte
+	for range 10 {
+		if _, err := rand.Read(randomBytes[:]); err != nil {
+			return "", err
+		}
+		candidate := path.Join(path.Dir(dst), ".tinylist-webdav-"+hex.EncodeToString(randomBytes[:]))
+		if _, err := fs.Get(ctx, candidate, &fs.GetArgs{NoLog: true}); errs.IsObjectNotFound(err) {
+			return candidate, nil
+		} else if err != nil {
+			return "", err
+		}
+	}
+	return "", errors.New("failed to allocate a WebDAV backup path")
+}
+
+func compensateFailedTransfer(ctx context.Context, dst, backupPath string, transferErr error) error {
+	cleanupErr := removeIfExists(ctx, dst)
+	if backupPath == "" {
+		if cleanupErr != nil {
+			return errors.Wrapf(transferErr, "transfer failed and partial destination remains at %s: cleanup failed: %v", dst, cleanupErr)
+		}
+		return transferErr
+	}
+	if cleanupErr != nil {
+		return errors.Wrapf(transferErr, "transfer failed; old destination remains at %s and partial destination remains at %s: cleanup failed: %v", backupPath, dst, cleanupErr)
+	}
+	if err := fs.Rename(ctx, backupPath, path.Base(dst)); err != nil {
+		return errors.Wrapf(transferErr, "transfer failed and restoring %s from %s also failed: %v", dst, backupPath, err)
+	}
+	return transferErr
+}
+
+func cleanupBackup(ctx context.Context, backupPath string) error {
+	if backupPath == "" {
+		return nil
+	}
+	return fs.Purge(ctx, backupPath)
+}
+
+func removeIfExists(ctx context.Context, target string) error {
+	_, err := fs.Get(ctx, target, &fs.GetArgs{NoLog: true})
+	if errs.IsObjectNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return fs.Purge(ctx, target)
 }
 
 // walkFS traverses filesystem fs starting at name up to depth levels.

@@ -39,6 +39,14 @@ func remove(ctx context.Context, path string) error {
 	return op.Remove(ctx, storage, actualPath)
 }
 
+func purge(ctx context.Context, path string) error {
+	storage, actualPath, err := op.GetStorageAndActualPath(path)
+	if err != nil {
+		return errors.WithMessage(err, "failed get storage")
+	}
+	return op.Purge(ctx, storage, actualPath)
+}
+
 func other(ctx context.Context, args model.FsOtherArgs) (interface{}, error) {
 	storage, actualPath, err := op.GetStorageAndActualPath(args.Path)
 	if err != nil {
@@ -53,6 +61,7 @@ type TaskData struct {
 	Status        string        `json:"-"` //don't save status to save space
 	SrcActualPath string        `json:"src_path"`
 	DstActualPath string        `json:"dst_path"`
+	DstName       string        `json:"dst_name,omitempty"`
 	SrcStorage    driver.Driver `json:"-"`
 	DstStorage    driver.Driver `json:"-"`
 	SrcStorageMp  string        `json:"src_storage_mp"`

@@ -64,6 +64,10 @@ type Move interface {
 	Move(ctx context.Context, srcObj, dstDir model.Obj) error
 }
 
+type MoveTo interface {
+	MoveTo(ctx context.Context, srcObj, dstDir model.Obj, dstName string) error
+}
+
 type Rename interface {
 	Rename(ctx context.Context, srcObj model.Obj, newName string) error
 }
@@ -72,8 +76,18 @@ type Copy interface {
 	Copy(ctx context.Context, srcObj, dstDir model.Obj) error
 }
 
+type CopyTo interface {
+	CopyTo(ctx context.Context, srcObj, dstDir model.Obj, dstName string) error
+}
+
 type Remove interface {
 	Remove(ctx context.Context, obj model.Obj) error
+}
+
+// Purge permanently removes an object for internal rollback and cleanup.
+// It must not apply user-facing recycle-bin behavior.
+type Purge interface {
+	Purge(ctx context.Context, obj model.Obj) error
 }
 
 type Put interface {

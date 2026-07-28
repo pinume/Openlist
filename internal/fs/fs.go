@@ -3,6 +3,7 @@ package fs
 import (
 	"context"
 	"io"
+	"path"
 
 	log "github.com/sirupsen/logrus"
 
@@ -67,23 +68,39 @@ func MakeDir(ctx context.Context, path string) error {
 }
 
 func Move(ctx context.Context, srcPath, dstDirPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
-	req, err := transfer(ctx, move, srcPath, dstDirPath, skipHook...)
+	req, err := transfer(ctx, move, srcPath, dstDirPath, "", skipHook...)
 	if err != nil {
 		log.Errorf("failed move %s to %s: %+v", srcPath, dstDirPath, err)
 	}
 	return req, err
 }
 
+func MoveTo(ctx context.Context, srcPath, dstPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
+	req, err := transfer(ctx, move, srcPath, path.Dir(dstPath), path.Base(dstPath), skipHook...)
+	if err != nil {
+		log.Errorf("failed move %s to %s: %+v", srcPath, dstPath, err)
+	}
+	return req, err
+}
+
 func Copy(ctx context.Context, srcObjPath, dstDirPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
-	res, err := transfer(ctx, copy, srcObjPath, dstDirPath, skipHook...)
+	res, err := transfer(ctx, copy, srcObjPath, dstDirPath, "", skipHook...)
 	if err != nil {
 		log.Errorf("failed copy %s to %s: %+v", srcObjPath, dstDirPath, err)
 	}
 	return res, err
 }
 
+func CopyTo(ctx context.Context, srcObjPath, dstPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
+	res, err := transfer(ctx, copy, srcObjPath, path.Dir(dstPath), path.Base(dstPath), skipHook...)
+	if err != nil {
+		log.Errorf("failed copy %s to %s: %+v", srcObjPath, dstPath, err)
+	}
+	return res, err
+}
+
 func Merge(ctx context.Context, srcObjPath, dstDirPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
-	res, err := transfer(ctx, merge, srcObjPath, dstDirPath, skipHook...)
+	res, err := transfer(ctx, merge, srcObjPath, dstDirPath, "", skipHook...)
 	if err != nil {
 		log.Errorf("failed merge %s to %s: %+v", srcObjPath, dstDirPath, err)
 	}
@@ -102,6 +119,14 @@ func Remove(ctx context.Context, path string) error {
 	err := remove(ctx, path)
 	if err != nil {
 		log.Errorf("failed remove %s: %+v", path, err)
+	}
+	return err
+}
+
+func Purge(ctx context.Context, path string) error {
+	err := purge(ctx, path)
+	if err != nil {
+		log.Errorf("failed purge %s: %+v", path, err)
 	}
 	return err
 }

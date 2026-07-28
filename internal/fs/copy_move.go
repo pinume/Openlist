@@ -91,7 +91,7 @@ func (t *FileTransferTask) SetRetry(retry int, maxRetry int) {
 	if retry == 0 &&
 		(len(t.groupID) == 0 || // 重启恢复
 			(t.GetErr() == nil && t.GetState() != tache.StatePending)) { // 手动重试
-		t.groupID = stdpath.Join(t.DstStorageMp, t.DstActualPath)
+		t.groupID = stdpath.Join(t.DstStorageMp, t.DstActualPath, t.DstName)
 		var payload any
 		if t.TaskType == move {
 			payload = task_group.SrcPathToRemove(stdpath.Join(t.SrcStorageMp, t.SrcActualPath))
@@ -100,7 +100,7 @@ func (t *FileTransferTask) SetRetry(retry int, maxRetry int) {
 	}
 }
 
-func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath string, skipHook ...bool) (task.TaskExtensionInfo, error) {
+func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath, dstName string, skipHook ...bool) (task.TaskExtensionInfo, error) {
 	srcStorage, srcObjActualPath, err := op.GetStorageAndActualPath(srcObjPath)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed get src storage")
@@ -115,12 +115,12 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath str
 			ctx = context.WithValue(ctx, conf.SkipHookKey, struct{}{})
 		}
 		if taskType == copy || taskType == merge {
-			err = op.Copy(ctx, srcStorage, srcObjActualPath, dstDirActualPath)
+			err = op.Copy(ctx, srcStorage, srcObjActualPath, dstDirActualPath, dstName)
 			if !errors.Is(err, errs.NotImplement) && !errors.Is(err, errs.NotSupport) {
 				return nil, err
 			}
 		} else {
-			err = op.Move(ctx, srcStorage, srcObjActualPath, dstDirActualPath)
+			err = op.Move(ctx, srcStorage, srcObjActualPath, dstDirActualPath, dstName)
 			if !errors.Is(err, errs.NotImplement) && !errors.Is(err, errs.NotSupport) {
 				return nil, err
 			}
@@ -134,13 +134,14 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath str
 			DstStorage:    dstStorage,
 			SrcActualPath: srcObjActualPath,
 			DstActualPath: dstDirActualPath,
+			DstName:       dstName,
 			SrcStorageMp:  srcStorage.GetStorage().MountPath,
 			DstStorageMp:  dstStorage.GetStorage().MountPath,
 		},
 		TaskType: taskType,
 	}
 
-	t.groupID = stdpath.Join(t.DstStorageMp, t.DstActualPath)
+	t.groupID = stdpath.Join(t.DstStorageMp, t.DstActualPath, t.DstName)
 	task_group.TransferCoordinator.AddTask(t.groupID, nil)
 	if ctx.Value(conf.NoTaskKey) != nil {
 		var callback func(nextTask *FileTransferTask) error
@@ -189,7 +190,11 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		if err != nil {
 			return errors.WithMessagef(err, "failed list src [%s] objs", t.SrcActualPath)
 		}
-		dstActualPath := stdpath.Join(t.DstActualPath, srcObj.GetName())
+		dstName := srcObj.GetName()
+		if t.DstName != "" {
+			dstName = t.DstName
+		}
+		dstActualPath := stdpath.Join(t.DstActualPath, dstName)
 		task_group.TransferCoordinator.AppendPayload(t.groupID, task_group.DstPathToHook(dstActualPath))
 
 		existedObjs := make(map[string]bool)
@@ -231,6 +236,7 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 					DstStorage:    t.DstStorage,
 					SrcActualPath: stdpath.Join(t.SrcActualPath, obj.GetName()),
 					DstActualPath: dstActualPath,
+					DstName:       "",
 					SrcStorageMp:  t.SrcStorageMp,
 					DstStorageMp:  t.DstStorageMp,
 				},
@@ -250,8 +256,12 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		return errors.WithMessagef(err, "failed get [%s] link", t.SrcActualPath)
 	}
 	// any link provided is seekable
+	streamObj := srcObj
+	if t.DstName != "" {
+		streamObj = &model.ObjWrapName{Name: t.DstName, Obj: srcObj}
+	}
 	ss, err := stream.NewSeekableStream(&stream.FileStream{
-		Obj: srcObj,
+		Obj: streamObj,
 		Ctx: t.Ctx(),
 	}, link)
 	if err != nil {

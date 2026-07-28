@@ -105,7 +105,11 @@ func (d *Dropbox) MakeDir(ctx context.Context, parentDir model.Obj, dirName stri
 }
 
 func (d *Dropbox) Move(ctx context.Context, srcObj, dstDir model.Obj) error {
-	toPath := dstDir.GetPath() + "/" + srcObj.GetName()
+	return d.MoveTo(ctx, srcObj, dstDir, srcObj.GetName())
+}
+
+func (d *Dropbox) MoveTo(ctx context.Context, srcObj, dstDir model.Obj, dstName string) error {
+	toPath := dstDir.GetPath() + "/" + dstName
 
 	_, err := d.request("/2/files/move_v2", http.MethodPost, func(req *resty.Request) {
 		req.SetContext(ctx).SetBody(base.Json{
@@ -137,7 +141,11 @@ func (d *Dropbox) Rename(ctx context.Context, srcObj model.Obj, newName string) 
 }
 
 func (d *Dropbox) Copy(ctx context.Context, srcObj, dstDir model.Obj) error {
-	toPath := dstDir.GetPath() + "/" + srcObj.GetName()
+	return d.CopyTo(ctx, srcObj, dstDir, srcObj.GetName())
+}
+
+func (d *Dropbox) CopyTo(ctx context.Context, srcObj, dstDir model.Obj, dstName string) error {
+	toPath := dstDir.GetPath() + "/" + dstName
 	_, err := d.request("/2/files/copy_v2", http.MethodPost, func(req *resty.Request) {
 		req.SetContext(ctx).SetBody(base.Json{
 			"allow_ownership_transfer": false,
@@ -158,6 +166,10 @@ func (d *Dropbox) Remove(ctx context.Context, obj model.Obj) error {
 		})
 	})
 	return err
+}
+
+func (d *Dropbox) Purge(ctx context.Context, obj model.Obj) error {
+	return d.Remove(ctx, obj)
 }
 
 func (d *Dropbox) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) error {
