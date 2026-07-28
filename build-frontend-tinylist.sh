@@ -7,6 +7,22 @@ frontend_repo="${OPENLIST_FRONTEND_REPO:-https://github.com/OpenListTeam/OpenLis
 frontend_commit="${OPENLIST_FRONTEND_COMMIT:-0d149d1ac40087556a36efecf11a51c012882e57}"
 i18n_url="https://github.com/OpenListTeam/OpenList-Frontend/releases/download/v4.2.4/i18n.tar.gz"
 i18n_sha256="f969170b947a185baef431dc6dabcfd90ed3826b535438661fdf84d6d076a38b"
+frontend_patch_dir="$repo_root/patches/frontend"
+frontend_patches=(
+  personal.patch
+  chinese-ui.patch
+  size.patch
+  aria2-removal.patch
+  tinylist.patch
+  preview-removal.patch
+  preview-dependencies.patch
+  preview-build.patch
+  folder-download.patch
+  manual-download.patch
+  header-logo.patch
+  download-options-removal.patch
+  service-removal.patch
+)
 work_root="$(mktemp -d)"
 
 cleanup() {
@@ -25,21 +41,9 @@ command -v corepack >/dev/null
 git clone --filter=blob:none --no-checkout "$frontend_repo" "$work_root/frontend"
 git -C "$work_root/frontend" fetch --depth=1 origin "$frontend_commit"
 git -C "$work_root/frontend" switch --detach "$frontend_commit"
-git -C "$work_root/frontend" apply "$repo_root/frontend-personal.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-chinese-ui.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-size.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-aria2-removal.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-tinylist.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-preview-removal.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-preview-dependencies.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-preview-build.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-folder-download.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-manual-download.patch"
-git -C "$work_root/frontend" apply "$repo_root/frontend-header-logo.patch"
-git -C "$work_root/frontend" apply \
-  "$repo_root/frontend-download-options-removal.patch"
-git -C "$work_root/frontend" apply \
-  "$repo_root/frontend-service-removal.patch"
+for patch in "${frontend_patches[@]}"; do
+  git -C "$work_root/frontend" apply "$frontend_patch_dir/$patch"
+done
 
 find "$work_root/frontend/src/pages/home/previews" -depth -delete
 find "$work_root/frontend/src/components/artplayer-plugin-ass" -depth -delete
