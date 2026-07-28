@@ -68,6 +68,20 @@ func TestCopyAndMoveHonorOverwriteAtExactDestination(t *testing.T) {
 	}
 	assertTestFile(t, filepath.Join(rootDir, "b", "bar"), "old-target")
 
+	restrictedCtx := context.WithValue(
+		context.Background(),
+		conf.UserKey,
+		&model.User{ID: 1, Permission: 1 << 6},
+	)
+	status, err = copyFiles(restrictedCtx, src, dst, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if status != http.StatusForbidden {
+		t.Fatalf("copy overwrite without remove permission status = %d, want %d", status, http.StatusForbidden)
+	}
+	assertTestFile(t, filepath.Join(rootDir, "b", "bar"), "old-target")
+
 	status, err = copyFiles(ctx, src, dst, true)
 	if err != nil {
 		t.Fatal(err)
@@ -92,16 +106,28 @@ func TestCopyAndMoveHonorOverwriteAtExactDestination(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(rootDir, "a", "foo")); !os.IsNotExist(err) {
 		t.Fatalf("move source still exists or stat failed: %v", err)
 	}
-	if err := filepath.WalkDir(rootDir, func(path string, entry os.DirEntry, err error) error {
+	var recycledContents []string
+	if err := filepath.WalkDir(rootDir, func(filePath string, entry os.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if strings.HasPrefix(entry.Name(), ".tinylist-webdav-") {
-			t.Fatalf("WebDAV backup was not permanently removed: %s", path)
+			rel, relErr := filepath.Rel(filepath.Join(rootDir, ".trash"), filePath)
+			if relErr != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(os.PathSeparator)) {
+				t.Fatalf("WebDAV backup remains outside the recycle bin: %s", filePath)
+			}
+			content, readErr := os.ReadFile(filePath)
+			if readErr != nil {
+				return readErr
+			}
+			recycledContents = append(recycledContents, string(content))
 		}
 		return nil
 	}); err != nil {
 		t.Fatal(err)
+	}
+	if !containsString(recycledContents, "old-target") || !containsString(recycledContents, "old-target-again") {
+		t.Fatalf("recycled overwrite contents = %v, want both old destinations", recycledContents)
 	}
 }
 
@@ -121,4 +147,13 @@ func assertTestFile(t *testing.T, path, want string) {
 	if string(content) != want {
 		t.Fatalf("%s = %q, want %q", path, content, want)
 	}
+}
+
+func containsString(values []string, want string) bool {
+	for _, value := range values {
+		if value == want {
+			return true
+		}
+	}
+	return false
 }

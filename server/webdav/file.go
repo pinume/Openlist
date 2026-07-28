@@ -74,7 +74,7 @@ func moveFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	if !srcAllowed || !dstAllowed {
 		return http.StatusForbidden, nil
 	}
-	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite)
+	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite, user.CanRemove())
 	if status != 0 || err != nil {
 		return status, err
 	}
@@ -133,7 +133,7 @@ func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	if !srcAllowed || !dstAllowed {
 		return http.StatusForbidden, nil
 	}
-	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite)
+	existed, backupPath, status, err := prepareDestination(ctx, dst, overwrite, user.CanRemove())
 	if status != 0 || err != nil {
 		return status, err
 	}
@@ -150,7 +150,7 @@ func copyFiles(ctx context.Context, src, dst string, overwrite bool) (status int
 	return http.StatusCreated, nil
 }
 
-func prepareDestination(ctx context.Context, dst string, overwrite bool) (existed bool, backupPath string, status int, err error) {
+func prepareDestination(ctx context.Context, dst string, overwrite, canRemove bool) (existed bool, backupPath string, status int, err error) {
 	_, err = fs.Get(ctx, dst, &fs.GetArgs{NoLog: true})
 	if err != nil {
 		if errs.IsObjectNotFound(err) {
@@ -160,6 +160,9 @@ func prepareDestination(ctx context.Context, dst string, overwrite bool) (existe
 	}
 	if !overwrite {
 		return true, "", http.StatusPreconditionFailed, nil
+	}
+	if !canRemove {
+		return true, "", http.StatusForbidden, nil
 	}
 	backupPath, err = unusedBackupPath(ctx, dst)
 	if err != nil {
@@ -188,7 +191,7 @@ func unusedBackupPath(ctx context.Context, dst string) (string, error) {
 }
 
 func compensateFailedTransfer(ctx context.Context, dst, backupPath string, transferErr error) error {
-	cleanupErr := removeIfExists(ctx, dst)
+	cleanupErr := purgeIfExists(ctx, dst)
 	if backupPath == "" {
 		if cleanupErr != nil {
 			return errors.Wrapf(transferErr, "transfer failed and partial destination remains at %s: cleanup failed: %v", dst, cleanupErr)
@@ -208,10 +211,10 @@ func cleanupBackup(ctx context.Context, backupPath string) error {
 	if backupPath == "" {
 		return nil
 	}
-	return fs.Purge(ctx, backupPath)
+	return fs.Remove(ctx, backupPath)
 }
 
-func removeIfExists(ctx context.Context, target string) error {
+func purgeIfExists(ctx context.Context, target string) error {
 	_, err := fs.Get(ctx, target, &fs.GetArgs{NoLog: true})
 	if errs.IsObjectNotFound(err) {
 		return nil
