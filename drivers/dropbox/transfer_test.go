@@ -42,11 +42,11 @@ func TestCopyFromLocalToDropboxStreamsCompleteFile(t *testing.T) {
 	useDropboxTestClients(t, server)
 
 	source := &model.Object{
-		Path: sourcePath,
+		Path: filepath.Base(sourcePath),
 		Name: filepath.Base(sourcePath),
 		Size: int64(len(content)),
 	}
-	local := &localdriver.Local{}
+	local := initializedLocal(t, filepath.Dir(sourcePath))
 	link, err := local.Link(context.Background(), source, model.LinkArgs{})
 	if err != nil {
 		t.Fatal(err)
@@ -112,10 +112,10 @@ func TestCopyFromDropboxToLocalStreamsCompleteFile(t *testing.T) {
 	}
 
 	destination := t.TempDir()
-	local := &localdriver.Local{}
+	local := initializedLocal(t, destination)
 	err = local.Put(
 		context.Background(),
-		&model.Object{Path: destination, IsFolder: true},
+		&model.Object{Path: ".", IsFolder: true},
 		sourceStream,
 		func(float64) {},
 	)
@@ -132,6 +132,21 @@ func TestCopyFromDropboxToLocalStreamsCompleteFile(t *testing.T) {
 	if string(got) != content {
 		t.Fatalf("copied content = %q, want %q", got, content)
 	}
+}
+
+func initializedLocal(t *testing.T, root string) *localdriver.Local {
+	t.Helper()
+	local := &localdriver.Local{}
+	local.SetRootPath(root)
+	if err := local.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := local.Drop(context.Background()); err != nil {
+			t.Errorf("drop local driver: %v", err)
+		}
+	})
+	return local
 }
 
 func useDropboxTestClients(t *testing.T, server *httptest.Server) {
