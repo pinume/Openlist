@@ -5,12 +5,19 @@ package local
 import (
 	"os"
 	"path/filepath"
-	"syscall"
+
+	"golang.org/x/sys/unix"
 )
 
-func copyNamedPipe(dstPath string, mode os.FileMode, dirMode os.FileMode) error {
-	if err := os.MkdirAll(filepath.Dir(dstPath), dirMode); err != nil {
+func (d *Local) copyNamedPipe(dstPath string, mode os.FileMode) error {
+	parent := filepath.Dir(dstPath)
+	if err := d.root.MkdirAll(parent, os.FileMode(d.mkdirPerm)); err != nil {
 		return err
 	}
-	return syscall.Mkfifo(dstPath, uint32(mode))
+	dir, err := d.root.Open(parent)
+	if err != nil {
+		return err
+	}
+	defer dir.Close()
+	return unix.Mkfifoat(int(dir.Fd()), filepath.Base(dstPath), uint32(mode.Perm()))
 }

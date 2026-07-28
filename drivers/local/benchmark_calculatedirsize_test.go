@@ -63,9 +63,6 @@ func BenchmarkCalculateDirSize(t *testing.B) {
 	generatedTestDir(testTempDir, 5, 10)
 	// Initialize the local driver with directory size calculation enabled
 	d := &Local{
-		directoryMap: DirectoryMap{
-			root: testTempDir,
-		},
 		Addition: Addition{
 			DirectorySize: true,
 			RootPath: driver.RootPath{
@@ -73,6 +70,13 @@ func BenchmarkCalculateDirSize(t *testing.B) {
 			},
 		},
 	}
+	root, err := os.OpenRoot(testTempDir)
+	if err != nil {
+		t.Fatalf("Failed to open test root: %v", err)
+	}
+	defer root.Close()
+	d.root = root
+	d.directoryMap.Configure(".", root)
 	//record the start time
 	t.StartTimer()
 	// Calculate the directory size

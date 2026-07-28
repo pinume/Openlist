@@ -9,9 +9,30 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/driver"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
 )
+
+func newTestLocal(t *testing.T, dir string, directorySize bool) *Local {
+	t.Helper()
+	driver := &Local{
+		Addition: Addition{
+			RootPath:      driver.RootPath{RootFolderPath: dir},
+			DirectorySize: directorySize,
+			ShowHidden:    true,
+		},
+	}
+	if err := driver.Init(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := driver.Drop(context.Background()); err != nil {
+			t.Errorf("drop local driver: %v", err)
+		}
+	})
+	return driver
+}
 
 func TestPutAtomicallyReplacesDestination(t *testing.T) {
 	dir := t.TempDir()
@@ -25,10 +46,10 @@ func TestPutAtomicallyReplacesDestination(t *testing.T) {
 		Reader: bytes.NewBufferString("new"),
 	}
 
-	driver := &Local{}
+	driver := newTestLocal(t, dir, false)
 	err := driver.Put(
 		context.Background(),
-		&model.Object{Path: dir, IsFolder: true},
+		&model.Object{Path: ".", IsFolder: true},
 		upload,
 		func(float64) {},
 	)
@@ -67,10 +88,10 @@ func TestPutFailurePreservesDestination(t *testing.T) {
 		),
 	}
 
-	driver := &Local{}
+	driver := newTestLocal(t, dir, false)
 	err := driver.Put(
 		context.Background(),
-		&model.Object{Path: dir, IsFolder: true},
+		&model.Object{Path: ".", IsFolder: true},
 		upload,
 		func(float64) {},
 	)

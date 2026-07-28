@@ -67,7 +67,7 @@ func CreateStorage(ctx context.Context, storage model.Storage) (uint, error) {
 	if err != nil {
 		return storage.ID, errors.Wrap(err, "failed init storage but storage is already created")
 	}
-	log.Debugf("storage %+v is created", storageDriver)
+	log.Debugf("storage %q using driver %q is created", storage.MountPath, storage.Driver)
 	return storage.ID, nil
 }
 
@@ -84,7 +84,7 @@ func LoadStorage(ctx context.Context, storage model.Storage) error {
 
 	err = initStorage(ctx, storage, storageDriver)
 	go callStorageHooks("add", storageDriver)
-	log.Debugf("storage %+v is created", storageDriver)
+	log.Debugf("storage %q using driver %q is loaded", storage.MountPath, storage.Driver)
 	return err
 }
 
@@ -253,7 +253,7 @@ func UpdateStorage(ctx context.Context, storage model.Storage) error {
 
 	err = initStorage(ctx, storage, storageDriver)
 	go callStorageHooks("update", storageDriver)
-	log.Debugf("storage %+v is update", storageDriver)
+	log.Debugf("storage %q using driver %q is updated", storage.MountPath, storage.Driver)
 	return err
 }
 

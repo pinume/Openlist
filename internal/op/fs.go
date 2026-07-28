@@ -369,7 +369,7 @@ func MakeDir(ctx context.Context, storage driver.Driver, path string) error {
 	return err
 }
 
-func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string) error {
+func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string, dstNames ...string) error {
 	if storage.Config().CheckStatus && storage.GetStorage().Status != WORK {
 		return errors.WithMessagef(errs.StorageNotInit, "storage status: %s", storage.GetStorage().Status)
 	}
@@ -390,6 +390,10 @@ func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 		return errors.WithStack(errs.PermissionDenied)
 	}
 	srcObj := model.UnwrapObjName(srcRawObj)
+	dstName := srcObj.GetName()
+	if len(dstNames) > 0 && dstNames[0] != "" {
+		dstName = dstNames[0]
+	}
 	dstDir, err := GetUnwrap(ctx, storage, dstDirPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to get dst dir")
@@ -399,13 +403,21 @@ func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	}
 
 	var newObj model.Obj
-	switch s := storage.(type) {
-	case driver.MoveResult:
-		newObj, err = s.Move(ctx, srcObj, dstDir)
-	case driver.Move:
-		err = s.Move(ctx, srcObj, dstDir)
-	default:
-		err = errs.NotImplement
+	if dstName != srcObj.GetName() {
+		if s, ok := storage.(driver.MoveTo); ok {
+			err = s.MoveTo(ctx, srcObj, dstDir, dstName)
+		} else {
+			err = errs.NotImplement
+		}
+	} else {
+		switch s := storage.(type) {
+		case driver.MoveResult:
+			newObj, err = s.Move(ctx, srcObj, dstDir)
+		case driver.Move:
+			err = s.Move(ctx, srcObj, dstDir)
+		default:
+			err = errs.NotImplement
+		}
 	}
 	if err != nil {
 		return errors.WithStack(err)
@@ -415,7 +427,7 @@ func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	dstKey := Key(storage, dstDirPath)
 	if !srcRawObj.IsDir() {
 		Cache.linkCache.DeleteKey(stdpath.Join(srcKey, srcRawObj.GetName()))
-		Cache.linkCache.DeleteKey(stdpath.Join(dstKey, srcRawObj.GetName()))
+		Cache.linkCache.DeleteKey(stdpath.Join(dstKey, dstName))
 	}
 	if !storage.Config().NoCache {
 		if cache, exist := Cache.dirCache.Get(srcKey); exist {
@@ -426,11 +438,14 @@ func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 		}
 		if cache, exist := Cache.dirCache.Get(dstKey); exist {
 			if newObj == nil {
-				newObj = &model.ObjWrapMask{Obj: srcRawObj, Mask: model.Temp}
+				newObj = &model.ObjWrapMask{
+					Obj:  &model.ObjWrapName{Name: dstName, Obj: srcRawObj},
+					Mask: model.Temp,
+				}
 			} else {
 				newObj = wrapObjName(storage, newObj)
 			}
-			cache.UpdateObject(srcRawObj.GetName(), newObj)
+			cache.UpdateObject(dstName, newObj)
 		}
 	}
 
@@ -440,7 +455,7 @@ func Move(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	if !srcObj.IsDir() {
 		go objsUpdateHook(context.WithoutCancel(ctx), storage, dstDirPath, false)
 	} else {
-		go objsUpdateHook(context.WithoutCancel(ctx), storage, stdpath.Join(dstDirPath, srcObj.GetName()), true)
+		go objsUpdateHook(context.WithoutCancel(ctx), storage, stdpath.Join(dstDirPath, dstName), true)
 	}
 	return nil
 }
@@ -507,7 +522,7 @@ func Rename(ctx context.Context, storage driver.Driver, srcPath, dstName string)
 }
 
 // Copy Just copy file[s] in a storage
-func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string) error {
+func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string, dstNames ...string) error {
 	if storage.Config().CheckStatus && storage.GetStorage().Status != WORK {
 		return errors.WithMessagef(errs.StorageNotInit, "storage status: %s", storage.GetStorage().Status)
 	}
@@ -524,6 +539,10 @@ func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	// 	return errors.WithStack(errs.PermissionDenied)
 	// }
 	srcObj := model.UnwrapObjName(srcRawObj)
+	dstName := srcObj.GetName()
+	if len(dstNames) > 0 && dstNames[0] != "" {
+		dstName = dstNames[0]
+	}
 	dstDir, err := GetUnwrap(ctx, storage, dstDirPath)
 	if err != nil {
 		return errors.WithMessage(err, "failed to get dst dir")
@@ -533,13 +552,21 @@ func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	}
 
 	var newObj model.Obj
-	switch s := storage.(type) {
-	case driver.CopyResult:
-		newObj, err = s.Copy(ctx, srcObj, dstDir)
-	case driver.Copy:
-		err = s.Copy(ctx, srcObj, dstDir)
-	default:
-		err = errs.NotImplement
+	if dstName != srcObj.GetName() {
+		if s, ok := storage.(driver.CopyTo); ok {
+			err = s.CopyTo(ctx, srcObj, dstDir, dstName)
+		} else {
+			err = errs.NotImplement
+		}
+	} else {
+		switch s := storage.(type) {
+		case driver.CopyResult:
+			newObj, err = s.Copy(ctx, srcObj, dstDir)
+		case driver.Copy:
+			err = s.Copy(ctx, srcObj, dstDir)
+		default:
+			err = errs.NotImplement
+		}
 	}
 	if err != nil {
 		return errors.WithStack(err)
@@ -547,16 +574,19 @@ func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 
 	dstKey := Key(storage, dstDirPath)
 	if !srcRawObj.IsDir() {
-		Cache.linkCache.DeleteKey(stdpath.Join(dstKey, srcRawObj.GetName()))
+		Cache.linkCache.DeleteKey(stdpath.Join(dstKey, dstName))
 	}
 	if !storage.Config().NoCache {
 		if cache, exist := Cache.dirCache.Get(dstKey); exist {
 			if newObj == nil {
-				newObj = &model.ObjWrapMask{Obj: srcRawObj, Mask: model.Temp}
+				newObj = &model.ObjWrapMask{
+					Obj:  &model.ObjWrapName{Name: dstName, Obj: srcRawObj},
+					Mask: model.Temp,
+				}
 			} else {
 				newObj = wrapObjName(storage, newObj)
 			}
-			cache.UpdateObject(srcRawObj.GetName(), newObj)
+			cache.UpdateObject(dstName, newObj)
 		}
 	}
 
@@ -566,7 +596,7 @@ func Copy(ctx context.Context, storage driver.Driver, srcPath, dstDirPath string
 	if !srcObj.IsDir() {
 		go objsUpdateHook(context.WithoutCancel(ctx), storage, dstDirPath, false)
 	} else {
-		go objsUpdateHook(context.WithoutCancel(ctx), storage, stdpath.Join(dstDirPath, srcObj.GetName()), true)
+		go objsUpdateHook(context.WithoutCancel(ctx), storage, stdpath.Join(dstDirPath, dstName), true)
 	}
 	return nil
 }
@@ -601,6 +631,36 @@ func Remove(ctx context.Context, storage driver.Driver, path string) error {
 		}
 	default:
 		return errs.NotImplement
+	}
+	return errors.WithStack(err)
+}
+
+func Purge(ctx context.Context, storage driver.Driver, path string) error {
+	if storage.Config().CheckStatus && storage.GetStorage().Status != WORK {
+		return errors.WithMessagef(errs.StorageNotInit, "storage status: %s", storage.GetStorage().Status)
+	}
+	path = utils.FixAndCleanPath(path)
+	if utils.PathEqual(path, "/") {
+		return errors.New("delete root folder is not allowed")
+	}
+	rawObj, err := Get(ctx, storage, path, true)
+	if err != nil {
+		if errs.IsObjectNotFound(err) {
+			return nil
+		}
+		return errors.WithMessage(err, "failed to get object")
+	}
+	dirPath := stdpath.Dir(path)
+	switch s := storage.(type) {
+	case driver.Purge:
+		err = s.Purge(ctx, model.UnwrapObjName(rawObj))
+	case driver.Remove:
+		err = s.Remove(ctx, model.UnwrapObjName(rawObj))
+	default:
+		return errs.NotImplement
+	}
+	if err == nil {
+		Cache.removeDirectoryObject(storage, dirPath, rawObj)
 	}
 	return errors.WithStack(err)
 }

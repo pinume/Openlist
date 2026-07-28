@@ -158,7 +158,7 @@ func InitConfig() {
 	if err != nil {
 		log.Fatalf("create temp dir error: %+v", err)
 	}
-	log.Debugf("config: %+v", conf.Conf)
+	log.Debug("configuration loaded")
 
 	// Validate and display proxy configuration status
 	validateProxyConfig()
