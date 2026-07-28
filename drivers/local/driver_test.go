@@ -7,8 +7,11 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
+	"sync"
 	"testing"
 
+	"github.com/OpenListTeam/OpenList/v4/internal/errs"
 	"github.com/OpenListTeam/OpenList/v4/internal/model"
 	"github.com/OpenListTeam/OpenList/v4/internal/stream"
 )
@@ -148,6 +151,145 @@ func TestDirectorySizeStaysConsistentAcrossMutations(t *testing.T) {
 		t.Fatal(err)
 	}
 	assertLocalRootSize(t, localDriver, rootDir)
+}
+
+func TestDirectoryRefreshReusesCachedDescendants(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootDir, "parent", "child"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(rootDir, "parent", "child", "file.txt"), []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localDriver := newTestLocal(t, rootDir, true)
+
+	var reads []string
+	localDriver.directoryMap.mu.Lock()
+	localDriver.directoryMap.readDirFn = func(root *os.Root, path string) ([]os.FileInfo, error) {
+		reads = append(reads, path)
+		return readDir(root, path)
+	}
+	localDriver.directoryMap.mu.Unlock()
+
+	if err := os.WriteFile(filepath.Join(rootDir, "new.txt"), []byte("new"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localDriver.refreshDirectory(".")
+
+	if len(reads) != 1 || reads[0] != "." {
+		t.Fatalf("Refresh() read directories %v, want only the storage root", reads)
+	}
+	assertLocalRootSize(t, localDriver, rootDir)
+}
+
+func TestCopyToExistingFileFallsBackWithoutTruncating(t *testing.T) {
+	rootDir := t.TempDir()
+	write := func(name, content string) {
+		t.Helper()
+		if err := os.WriteFile(filepath.Join(rootDir, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("source.txt", "source")
+	write("destination.txt", "destination")
+	localDriver := newTestLocal(t, rootDir, false)
+
+	err := localDriver.CopyTo(
+		context.Background(),
+		&model.Object{Path: "source.txt", Name: "source.txt"},
+		&model.Object{Path: ".", IsFolder: true},
+		"destination.txt",
+	)
+	if !errors.Is(err, errs.NotImplement) {
+		t.Fatalf("CopyTo() error = %v, want NotImplement fallback", err)
+	}
+	content, readErr := os.ReadFile(filepath.Join(rootDir, "destination.txt"))
+	if readErr != nil {
+		t.Fatal(readErr)
+	}
+	if string(content) != "destination" {
+		t.Fatalf("destination changed before fallback: %q", content)
+	}
+}
+
+func TestLocalRejectsInvalidTransferNamesAndAbsoluteSymlinkCopy(t *testing.T) {
+	rootDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(rootDir, "source.txt"), []byte("source"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	localDriver := newTestLocal(t, rootDir, false)
+	src := &model.Object{Path: "source.txt", Name: "source.txt"}
+	dst := &model.Object{Path: ".", IsFolder: true}
+	for _, name := range []string{"", ".", "..", "nested/name"} {
+		if err := localDriver.CopyTo(context.Background(), src, dst, name); !errors.Is(err, errs.PermissionDenied) {
+			t.Fatalf("CopyTo(..., %q) error = %v, want permission denied", name, err)
+		}
+		if err := localDriver.MoveTo(context.Background(), src, dst, name); !errors.Is(err, errs.PermissionDenied) {
+			t.Fatalf("MoveTo(..., %q) error = %v, want permission denied", name, err)
+		}
+	}
+
+	absoluteTarget := filepath.Join(rootDir, "source.txt")
+	if err := os.Symlink(absoluteTarget, filepath.Join(rootDir, "absolute-link")); err != nil {
+		t.Skipf("symlink is unavailable: %v", err)
+	}
+	err := localDriver.CopyTo(
+		context.Background(),
+		&model.Object{Path: "absolute-link", Name: "absolute-link"},
+		dst,
+		"copied-link",
+	)
+	if err == nil || !strings.Contains(err.Error(), "absolute target") {
+		t.Fatalf("CopyTo() absolute symlink error = %v", err)
+	}
+	if _, statErr := os.Lstat(filepath.Join(rootDir, "copied-link")); !os.IsNotExist(statErr) {
+		t.Fatalf("absolute symlink copy created a destination: %v", statErr)
+	}
+}
+
+func TestLocalOperationAfterDropReturnsStorageNotInit(t *testing.T) {
+	rootDir := t.TempDir()
+	localDriver := newTestLocal(t, rootDir, false)
+	if err := localDriver.Drop(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := localDriver.GetRoot(context.Background()); !errors.Is(err, errs.StorageNotInit) {
+		t.Fatalf("GetRoot() error = %v, want storage not init", err)
+	}
+}
+
+func TestLocalRootLifecycleIsSafeDuringList(t *testing.T) {
+	rootDir := t.TempDir()
+	localDriver := newTestLocal(t, rootDir, false)
+	var wg sync.WaitGroup
+	errsCh := make(chan error, 100)
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for range 100 {
+			_, err := localDriver.List(
+				context.Background(),
+				&model.Object{Path: ".", IsFolder: true},
+				model.ListArgs{},
+			)
+			if err != nil && !errors.Is(err, errs.StorageNotInit) {
+				errsCh <- err
+			}
+		}
+	}()
+	for range 20 {
+		if err := localDriver.Drop(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+		if err := localDriver.Init(context.Background()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	wg.Wait()
+	close(errsCh)
+	for err := range errsCh {
+		t.Fatalf("List() during root reload returned unexpected error: %v", err)
+	}
 }
 
 func TestPutPreservesExistingZeroMode(t *testing.T) {

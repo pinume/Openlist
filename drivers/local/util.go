@@ -32,6 +32,14 @@ func cleanRootPath(name string) (string, error) {
 	return name, nil
 }
 
+func destinationPath(parent, name string) (string, error) {
+	if name == "" || name == "." || name == ".." ||
+		filepath.Base(name) != name || strings.ContainsAny(name, `/\`) {
+		return "", errs.PermissionDenied
+	}
+	return cleanRootPath(filepath.Join(parent, name))
+}
+
 func createUploadTemp(root *os.Root, dir string) (*os.File, string, error) {
 	var random [8]byte
 	for range 10 {
@@ -79,11 +87,12 @@ func readDir(root *os.Root, dirname string) ([]fs.FileInfo, error) {
 }
 
 type DirectoryMap struct {
-	root   string
-	fsRoot *os.Root
-	mu     sync.RWMutex
-	data   map[string]*DirectoryNode
-	dirty  bool
+	root      string
+	fsRoot    *os.Root
+	readDirFn func(*os.Root, string) ([]fs.FileInfo, error)
+	mu        sync.RWMutex
+	data      map[string]*DirectoryNode
+	dirty     bool
 }
 
 type DirectoryNode struct {
@@ -108,6 +117,7 @@ func (m *DirectoryMap) Configure(root string, fsRoot *os.Root) {
 	defer m.mu.Unlock()
 	m.root = root
 	m.fsRoot = fsRoot
+	m.readDirFn = readDir
 	m.data = make(map[string]*DirectoryNode)
 	m.dirty = false
 }
@@ -191,7 +201,7 @@ func (m *DirectoryMap) calculateDirSizeLocked(dirname string) (int64, error) {
 			continue
 		}
 
-		files, err := readDir(m.fsRoot, task.path)
+		files, err := m.readDirFn(m.fsRoot, task.path)
 		if err != nil {
 			return 0, err
 		}
@@ -278,7 +288,7 @@ func (m *DirectoryMap) updateDirSizeLocked(dirname string) (int64, error) {
 		return 0, fmt.Errorf("directory node not found")
 	}
 
-	files, err := readDir(m.fsRoot, dirname)
+	files, err := m.readDirFn(m.fsRoot, dirname)
 	if err != nil {
 		return 0, err
 	}
@@ -358,11 +368,14 @@ func (m *DirectoryMap) Refresh(dirname string) error {
 			return m.recalculateDirSizeLocked()
 		}
 	} else {
-		m.deleteDirNodeLocked(dirname)
-		if _, err := m.calculateDirSizeLocked(dirname); err != nil {
+		if _, err := m.updateDirSizeLocked(dirname); err != nil {
 			m.dirty = true
 			return m.recalculateDirSizeLocked()
 		}
+	}
+	if dirname == m.root {
+		m.dirty = false
+		return nil
 	}
 	current := filepath.Dir(dirname)
 	for m.containsLocked(current) {
@@ -426,15 +439,16 @@ func (d *Local) copySymlink(srcPath, dstPath string) error {
 	if err != nil {
 		return err
 	}
-	dstDir := filepath.Dir(dstPath)
-	if !filepath.IsAbs(linkOrig) {
-		srcDir := filepath.Dir(srcPath)
-		rel, err := filepath.Rel(dstDir, srcDir)
-		if err != nil {
-			return err
-		}
-		linkOrig = filepath.Clean(filepath.Join(rel, linkOrig))
+	if filepath.IsAbs(linkOrig) {
+		return errors.New("cannot copy a symbolic link with an absolute target")
 	}
+	dstDir := filepath.Dir(dstPath)
+	srcDir := filepath.Dir(srcPath)
+	rel, err := filepath.Rel(dstDir, srcDir)
+	if err != nil {
+		return err
+	}
+	linkOrig = filepath.Clean(filepath.Join(rel, linkOrig))
 	err = d.root.MkdirAll(dstDir, os.FileMode(d.mkdirPerm))
 	if err != nil {
 		return err
@@ -473,6 +487,11 @@ func (d *Local) recurAndTryCopy(srcPath, dstPath string) error {
 }
 
 func (d *Local) tryReflinkCopy(srcPath, dstPath string, mode os.FileMode) error {
+	if _, err := d.root.Lstat(dstPath); err == nil {
+		return errs.NotImplement
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	src, err := d.root.Open(srcPath)
 	if err != nil {
 		return err
@@ -480,6 +499,9 @@ func (d *Local) tryReflinkCopy(srcPath, dstPath string, mode os.FileMode) error 
 	defer src.Close()
 	dst, err := d.root.OpenFile(dstPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, mode.Perm())
 	if err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return errs.NotImplement
+		}
 		return err
 	}
 	defer dst.Close()

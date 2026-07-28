@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/OpenListTeam/OpenList/v4/internal/driver"
@@ -24,6 +25,7 @@ type Local struct {
 	model.Storage
 	Addition
 	mkdirPerm int32
+	rootMu    sync.RWMutex
 	root      *os.Root
 
 	recycleBinPath string
@@ -37,6 +39,8 @@ func (d *Local) Config() driver.Config {
 }
 
 func (d *Local) Init(ctx context.Context) error {
+	d.rootMu.Lock()
+	defer d.rootMu.Unlock()
 	if d.root != nil {
 		if err := d.root.Close(); err != nil {
 			return err
@@ -97,6 +101,8 @@ func (d *Local) Init(ctx context.Context) error {
 }
 
 func (d *Local) Drop(ctx context.Context) error {
+	d.rootMu.Lock()
+	defer d.rootMu.Unlock()
 	if d.root != nil {
 		err := d.root.Close()
 		d.root = nil
@@ -111,6 +117,10 @@ func (d *Local) GetAddition() driver.Additional {
 }
 
 func (d *Local) GetRoot(ctx context.Context) (model.Obj, error) {
+	if err := d.lockRoot(); err != nil {
+		return nil, err
+	}
+	defer d.rootMu.RUnlock()
 	info, err := d.root.Stat(".")
 	if err != nil {
 		return nil, err
@@ -139,6 +149,10 @@ func (d *Local) GetRoot(ctx context.Context) (model.Obj, error) {
 }
 
 func (d *Local) List(ctx context.Context, dir model.Obj, args model.ListArgs) ([]model.Obj, error) {
+	if err := d.lockRoot(); err != nil {
+		return nil, err
+	}
+	defer d.rootMu.RUnlock()
 	parent, err := cleanRootPath(dir.GetPath())
 	if err != nil {
 		return nil, err
@@ -171,27 +185,21 @@ func (d *Local) fileInfoToObj(f fs.FileInfo, parent string) model.Obj {
 	} else {
 		size = f.Size()
 	}
-	var ctime time.Time
-	file, err := d.root.Open(objPath)
-	if err == nil {
-		if t, statErr := times.StatFile(file); statErr == nil && t.HasBirthTime() {
-			ctime = t.BirthTime()
-		}
-		_ = file.Close()
-	}
-
 	obj := model.Object{
 		Path:     objPath,
 		Name:     f.Name(),
 		Modified: f.ModTime(),
 		Size:     size,
 		IsFolder: isFolder,
-		Ctime:    ctime,
 	}
 	return &obj
 }
 
 func (d *Local) Get(ctx context.Context, path string) (model.Obj, error) {
+	if err := d.lockRoot(); err != nil {
+		return nil, err
+	}
+	defer d.rootMu.RUnlock()
 	path, err := cleanRootPath(path)
 	if err != nil {
 		return nil, err
@@ -214,12 +222,14 @@ func (d *Local) Get(ctx context.Context, path string) (model.Obj, error) {
 		size = f.Size()
 	}
 	var ctime time.Time
-	fileHandle, openErr := d.root.Open(path)
-	if openErr == nil {
-		if t, statErr := times.StatFile(fileHandle); statErr == nil && t.HasBirthTime() {
-			ctime = t.BirthTime()
+	if f.Mode().IsRegular() || f.IsDir() {
+		fileHandle, openErr := d.root.Open(path)
+		if openErr == nil {
+			if t, statErr := times.StatFile(fileHandle); statErr == nil && t.HasBirthTime() {
+				ctime = t.BirthTime()
+			}
+			_ = fileHandle.Close()
 		}
-		_ = fileHandle.Close()
 	}
 	file := model.Object{
 		Path:     path,
@@ -233,6 +243,10 @@ func (d *Local) Get(ctx context.Context, path string) (model.Obj, error) {
 }
 
 func (d *Local) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (*model.Link, error) {
+	if err := d.lockRoot(); err != nil {
+		return nil, err
+	}
+	defer d.rootMu.RUnlock()
 	fullPath, err := cleanRootPath(file.GetPath())
 	if err != nil {
 		return nil, err
@@ -251,6 +265,10 @@ func (d *Local) Link(ctx context.Context, file model.Obj, args model.LinkArgs) (
 }
 
 func (d *Local) MakeDir(ctx context.Context, parentDir model.Obj, dirName string) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	parent, err := cleanRootPath(parentDir.GetPath())
 	if err != nil {
 		return err
@@ -269,6 +287,10 @@ func (d *Local) Move(ctx context.Context, srcObj, dstDir model.Obj) error {
 }
 
 func (d *Local) MoveTo(ctx context.Context, srcObj, dstDir model.Obj, dstName string) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	srcPath, err := cleanRootPath(srcObj.GetPath())
 	if err != nil {
 		return err
@@ -277,7 +299,10 @@ func (d *Local) MoveTo(ctx context.Context, srcObj, dstDir model.Obj, dstName st
 	if err != nil {
 		return err
 	}
-	dstPath := filepath.Join(dstDirPath, dstName)
+	dstPath, err := destinationPath(dstDirPath, dstName)
+	if err != nil {
+		return err
+	}
 	if utils.IsSubPath(srcPath, dstPath) {
 		return fmt.Errorf("the destination folder is a subfolder of the source folder")
 	}
@@ -296,11 +321,18 @@ func (d *Local) MoveTo(ctx context.Context, srcObj, dstDir model.Obj, dstName st
 }
 
 func (d *Local) Rename(ctx context.Context, srcObj model.Obj, newName string) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	srcPath, err := cleanRootPath(srcObj.GetPath())
 	if err != nil {
 		return err
 	}
-	dstPath := filepath.Join(filepath.Dir(srcPath), newName)
+	dstPath, err := destinationPath(filepath.Dir(srcPath), newName)
+	if err != nil {
+		return err
+	}
 	err = d.root.Rename(srcPath, dstPath)
 	if err != nil {
 		return err
@@ -318,6 +350,10 @@ func (d *Local) Copy(ctx context.Context, srcObj, dstDir model.Obj) error {
 }
 
 func (d *Local) CopyTo(_ context.Context, srcObj, dstDir model.Obj, dstName string) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	srcPath, err := cleanRootPath(srcObj.GetPath())
 	if err != nil {
 		return err
@@ -326,7 +362,10 @@ func (d *Local) CopyTo(_ context.Context, srcObj, dstDir model.Obj, dstName stri
 	if err != nil {
 		return err
 	}
-	dstPath := filepath.Join(dstDirPath, dstName)
+	dstPath, err := destinationPath(dstDirPath, dstName)
+	if err != nil {
+		return err
+	}
 	if utils.IsSubPath(srcPath, dstPath) {
 		return fmt.Errorf("the destination folder is a subfolder of the source folder")
 	}
@@ -345,6 +384,10 @@ func (d *Local) CopyTo(_ context.Context, srcObj, dstDir model.Obj, dstName stri
 }
 
 func (d *Local) Remove(ctx context.Context, obj model.Obj) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	objPath, pathErr := cleanRootPath(obj.GetPath())
 	if pathErr != nil {
 		return pathErr
@@ -388,6 +431,10 @@ func (d *Local) Remove(ctx context.Context, obj model.Obj) error {
 }
 
 func (d *Local) Purge(ctx context.Context, obj model.Obj) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	objPath, err := cleanRootPath(obj.GetPath())
 	if err != nil {
 		return err
@@ -405,6 +452,10 @@ func (d *Local) Purge(ctx context.Context, obj model.Obj) error {
 }
 
 func (d *Local) Put(ctx context.Context, dstDir model.Obj, stream model.FileStreamer, up driver.UpdateProgress) error {
+	if err := d.lockRoot(); err != nil {
+		return err
+	}
+	defer d.rootMu.RUnlock()
 	dstDirPath, err := cleanRootPath(dstDir.GetPath())
 	if err != nil {
 		return err
@@ -462,6 +513,15 @@ func (d *Local) refreshDirectory(path string) {
 		d.directoryMap.MarkDirty()
 		log.Warnf("[local] directory size cache is dirty after refreshing %s: %v", path, err)
 	}
+}
+
+func (d *Local) lockRoot() error {
+	d.rootMu.RLock()
+	if d.root == nil {
+		d.rootMu.RUnlock()
+		return errs.StorageNotInit
+	}
+	return nil
 }
 
 func (d *Local) GetDetails(ctx context.Context) (*model.StorageDetails, error) {
