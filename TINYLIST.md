@@ -28,6 +28,24 @@ TinyList 不创建游客账号。已有数据库中的旧游客账号会在服�
 新建或修改的密码使用 Argon2id 存储。旧版本的 SHA-256 密码记录仍可登录，并会
 在下一次网页或 WebDAV 密码登录成功后自动升级，不要求用户集中重置密码。
 
+## Local 存储边界
+
+Local 驱动通过 Go `os.Root` 访问存储目录。相对符号链接可以指向存储根内的对象；
+指向根外或使用绝对目标的符号链接不能用于读取、遍历或写入。回收站也必须位于
+存储根内，配置为根外路径时存储初始化会失败。
+
+`os.Root` 限制的是路径解析，不是完整的操作系统沙箱：它不会阻止存储根内已有的
+bind mount、特殊的 `/proc` 文件或设备文件跨越底层文件系统边界。生产环境仍应
+保留 `deploy/tinylist.service` 中的 systemd 文件系统保护，并避免把设备或不可信
+挂载点放进 Local 根目录。
+
+上传文件不提供 per-storage 权限配置。新文件权限由进程 umask 控制；默认 systemd
+unit 使用 `UMask=0027`。覆盖已有文件时沿用原文件权限，包括权限位为 `0000` 的文件。
+
+启用目录大小统计后，隐藏文件同样计入大小。列表刷新只重算当前目录和父目录链；
+缓存更新失败不会把已经成功的文件操作改报为失败，而是标记缓存失效，并在下次
+刷新时重建。
+
 ## 用户隔离
 
 沿用上游 OpenList 的用户模型：
@@ -67,6 +85,7 @@ AArch64 主机上，输出为 `dist/tinylist-linux-arm64`。
 gofmt -w $(git diff --name-only --diff-filter=ACM -- '*.go')
 go mod tidy
 go test ./...
+go test -race ./drivers/local ./server/webdav
 go test -race ./internal/sign/... ./pkg/sign/... ./server/handles/... ./server/middlewares/...
 ```
 
@@ -76,6 +95,11 @@ go test -race ./internal/sign/... ./pkg/sign/... ./server/handles/... ./server/m
 - 验证用户 `base_path`、Meta 密码、读写用户列表和隐藏文件权限仍能限制文件列表、详情、搜索及压缩包列表。
 - 请求 `/api/fs/list` 时省略 `per_page` 并分别设置 `page=3`、`page=5`，确认返回空页而不是 HTTP 500。
 - 验证 Local、Dropbox 上传、下载、复制、移动、删除和文件夹流式 ZIP 下载。
+- 在启用目录大小统计的 Local 挂载上依次执行刷新、上传、删除、目录重命名和再次
+  刷新，使用包含隐藏文件的独立 `filepath.WalkDir` 统计结果核对根目录及父目录大小。
+- 验证 Local 根内相对符号链接可访问，根外和绝对目标符号链接不能越过存储根。
+- 验证 WebDAV COPY/MOVE 的 `Overwrite: F` 返回 412，覆盖成功返回 204，新建目标
+  返回 201，并且目标名称与源名称不同时不会碰撞同目录的无关文件。
 - 验证 WebDAV、FTP、SFTP 在缺少或无效用户上下文时拒绝访问，正常账号仍可按权限读写。
 - 重置管理员 Token 的同时并发访问签名下载接口，并使用 `go test -race` 确认没有签名实例数据竞争。
 - 确认浏览器下载凭证只绑定一个路径且约五分钟后失效，升级时会删除旧的 `link_expiration` 设置。
