@@ -63,7 +63,6 @@ func (d *Dropbox) refreshToken() error {
 	if err != nil {
 		return err
 	}
-	log.Debugf("[dropbox] refresh token response: %s", resp.String())
 	if resp.StatusCode() != 200 {
 		return fmt.Errorf("failed to refresh token: %s", resp.String())
 	}
@@ -98,7 +97,6 @@ func (d *Dropbox) request(uri, method string, callback base.ReqCallback, retry .
 	if err != nil {
 		return nil, err
 	}
-	log.Debugf("[dropbox] request (%s) response: %s", uri, res.String())
 	isRetry := len(retry) > 0 && retry[0]
 	if res.StatusCode() != 200 {
 		body := res.String()

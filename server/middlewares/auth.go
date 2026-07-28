@@ -28,7 +28,7 @@ func Auth() func(c *gin.Context) {
 				return
 			}
 			common.GinAppendValues(c, conf.UserKey, admin)
-			log.Debugf("use admin token: %+v", admin)
+			log.Debugf("authenticated admin user %q", admin.Username)
 			c.Next()
 			return
 		}
@@ -56,7 +56,7 @@ func Auth() func(c *gin.Context) {
 			return
 		}
 		common.GinAppendValues(c, conf.UserKey, user)
-		log.Debugf("use login token: %+v", user)
+		log.Debugf("authenticated user %q", user.Username)
 		c.Next()
 	}
 }
