@@ -124,4 +124,5 @@ const (
 	UserAgentKey
 	PathKey
 	SkipHookKey
+	SkipExistingKey
 )
