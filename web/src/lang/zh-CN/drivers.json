@@ -1,0 +1,38 @@
+{
+  "Local": {
+    "directory_size": "目录大小",
+    "directory_size-tips": "这可能会影响主机的性能",
+    "mkdir_perm": "创建文件夹权限",
+    "recycle_bin_path": "回收站路径",
+    "recycle_bin_path-tips": "回收站的路径，如果空或保留“永久删除”则永久删除",
+    "root_folder_path": "根文件夹路径",
+    "show_hidden": "显示隐藏",
+    "show_hidden-tips": "显示隐藏目录以及文件",
+    "thumb_cache_folder": "缩略图缓存文件夹",
+    "thumb_concurrency": "缩略图并发数",
+    "thumb_concurrency-tips": "同时生成缩略图的数量。这控制了可以并行生成多少缩略图。",
+    "thumbnail": "缩略图",
+    "thumbnail-tips": "启用缩略图",
+    "video_thumb_pos": "视频缩略图",
+    "video_thumb_pos-tips": "视频缩略图的位置。如果该值是一个数字（整数点浮点），它代表几秒钟的时间。如果值以“%”结尾，则代表视频持续时间的百分比。"
+  },
+  "Dropbox": {
+    "RootNamespaceId": "根命名空间 ID",
+    "api_url_address": "API 地址",
+    "client_id": "客户端 ID",
+    "client_id-tips": "如果你没有，请留空",
+    "client_secret": "客户端密钥",
+    "client_secret-tips": "如果你没有，请留空",
+    "refresh_token": "刷新令牌",
+    "root_folder_path": "根文件夹路径",
+    "use_online_api": "使用在线 API"
+  },
+  "config": {
+    "Local": {},
+    "Dropbox": {}
+  },
+  "drivers": {
+    "Local": "本机存储",
+    "Dropbox": "Dropbox"
+  }
+}

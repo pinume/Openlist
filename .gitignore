@@ -22,6 +22,9 @@ output/
 # vendor/
 /bin/*
 *.json
+!/web/**/*.json
+!/third_party/**
+!/vendor/**
 /build
 /data/
 /tmp/

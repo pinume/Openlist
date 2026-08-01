@@ -3,83 +3,43 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-frontend_repo="${OPENLIST_FRONTEND_REPO:-https://github.com/OpenListTeam/OpenList-Frontend.git}"
-frontend_commit="${OPENLIST_FRONTEND_COMMIT:-0d149d1ac40087556a36efecf11a51c012882e57}"
-i18n_url="https://github.com/OpenListTeam/OpenList-Frontend/releases/download/v4.2.4/i18n.tar.gz"
-i18n_sha256="f969170b947a185baef431dc6dabcfd90ed3826b535438661fdf84d6d076a38b"
-frontend_patch_dir="$repo_root/patches/frontend"
-frontend_patches=(
-  personal.patch
-  chinese-ui.patch
-  size.patch
-  aria2-removal.patch
-  tinylist.patch
-  preview-removal.patch
-  preview-dependencies.patch
-  preview-build.patch
-  folder-download.patch
-  manual-download.patch
-  header-logo.patch
-  download-options-removal.patch
-  service-removal.patch
-)
-work_root="$(mktemp -d)"
+web_root="$repo_root/web"
+pnpm_root="$repo_root/third_party/pnpm/11.10.0"
+pnpm_cli="$pnpm_root/bin/pnpm.mjs"
+pnpm_store_archive="$repo_root/third_party/pnpm/store-v11.tar.gz"
+pnpm_store_sha256="1d27c1ef5b3dd508020bb32a19a0752754b8af5f08c9b64ea1fe1327116388c8"
 
+command -v grep >/dev/null
+command -v node >/dev/null
+command -v sha256sum >/dev/null
+command -v tar >/dev/null
+
+if [[ ! -f "$pnpm_cli" || ! -f "$pnpm_store_archive" ]]; then
+  echo "Vendored pnpm or its offline store is missing." >&2
+  exit 1
+fi
+
+printf '%s  %s\n' "$pnpm_store_sha256" "$pnpm_store_archive" |
+  sha256sum --check -
+
+work_root="$(mktemp -d)"
 cleanup() {
   rm -rf -- "$work_root"
 }
 trap cleanup EXIT
 
-command -v git >/dev/null
-command -v curl >/dev/null
-command -v grep >/dev/null
-command -v sha256sum >/dev/null
-command -v tar >/dev/null
-command -v node >/dev/null
-command -v corepack >/dev/null
-
-git clone --filter=blob:none --no-checkout "$frontend_repo" "$work_root/frontend"
-git -C "$work_root/frontend" fetch --depth=1 origin "$frontend_commit"
-git -C "$work_root/frontend" switch --detach "$frontend_commit"
-for patch in "${frontend_patches[@]}"; do
-  git -C "$work_root/frontend" apply "$frontend_patch_dir/$patch"
-done
-
-find "$work_root/frontend/src/pages/home/previews" -depth -delete
-find "$work_root/frontend/src/components/artplayer-plugin-ass" -depth -delete
-find "$work_root/frontend/public/images" -maxdepth 1 -type f \
-  \( -name 'figplayer.webp' -o -name 'iina.webp' -o -name 'infuse.webp' \
-  -o -name 'mpv.webp' -o -name 'mxplayer*.webp' -o -name 'nplayer.webp' \
-  -o -name 'omniplayer.webp' -o -name 'potplayer.webp' \
-  -o -name 'vlc.webp' \) -delete
-rm -f \
-  "$work_root/frontend/src/components/EncodingSelect.tsx" \
-  "$work_root/frontend/src/components/Markdown.tsx" \
-  "$work_root/frontend/src/components/MonacoEditor.tsx" \
-  "$work_root/frontend/src/components/markdown.css" \
-  "$work_root/frontend/src/pages/home/Readme.tsx" \
-  "$work_root/frontend/src/pages/home/file/open-with.tsx" \
-  "$work_root/frontend/src/pages/home/folder/ImageItem.tsx" \
-  "$work_root/frontend/src/pages/home/folder/Images.tsx"
-rm -f \
-  "$work_root/frontend/src/pages/manage/settings/S3.tsx" \
-  "$work_root/frontend/src/pages/manage/settings/S3BucketItem.tsx" \
-  "$work_root/frontend/src/pages/manage/settings/S3Buckets.tsx" \
-  "$work_root/frontend/src/pages/manage/users/PublicKey.tsx" \
-  "$work_root/frontend/src/pages/manage/users/PublicKeys.tsx" \
-  "$work_root/frontend/src/types/sshkey.ts"
-
-curl -fsSL "$i18n_url" -o "$work_root/i18n.tar.gz"
-printf '%s  %s\n' "$i18n_sha256" "$work_root/i18n.tar.gz" | sha256sum --check -
-tar -xzf "$work_root/i18n.tar.gz" -C "$work_root/frontend/src/lang" ./zh-CN
-node "$repo_root/scripts/prune-frontend-i18n.mjs" \
-  "$work_root/frontend/src/lang/zh-CN"
-find "$work_root/frontend/src/lang/en" -depth -delete
+tar -xzf "$pnpm_store_archive" -C "$work_root"
 
 (
-  cd "$work_root/frontend"
-  corepack pnpm install --frozen-lockfile
-  corepack pnpm build
+  cd "$web_root"
+  CI=true PNPM_DISABLE_SELF_UPDATE_CHECK=1 \
+    pnpm_config_store_dir="$work_root/store" \
+    node "$pnpm_cli" install \
+      --offline \
+      --frozen-lockfile
+  CI=true PNPM_DISABLE_SELF_UPDATE_CHECK=1 \
+    pnpm_config_store_dir="$work_root/store" \
+    node "$pnpm_cli" build
   if [[ -d dist/static/monaco-editor/vs ]]; then
     find dist/static/monaco-editor/vs -type f \
       -name 'nls.messages.*.js.js' \
@@ -129,6 +89,6 @@ find "$work_root/frontend/src/lang/en" -depth -delete
 
 mkdir -p "$repo_root/public/dist"
 find "$repo_root/public/dist" -mindepth 1 ! -name README.md -delete
-cp -a "$work_root/frontend/dist/." "$repo_root/public/dist/"
+cp -a "$web_root/dist/." "$repo_root/public/dist/"
 
 echo "Built TinyList frontend into $repo_root/public/dist"

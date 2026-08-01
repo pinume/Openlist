@@ -65,14 +65,25 @@ unit 使用 `UMask=0027`。覆盖已有文件时沿用原文件权限，包括�
 
 ## 构建
 
-Go 版本和工具链以 `go.mod` 为准。前端需要 Node.js、Corepack 和 Git。
+构建过程完全离线，不会访问 Go Proxy、npm、GitHub、Crowdin 或其他上游服务。
+构建机需要预装 `go.mod` 指定的 Go 工具链以及 Node.js 22.13 或更高版本；
+工具链本身不在仓库内，构建脚本不会尝试在线安装或升级工具链。
+
+前端源码已固化提交在 `web/`（导入来源、上游基线提交、许可证见
+`web/UPSTREAM.md`），不再在构建期联网拉取上游仓库。
 
 ```bash
 ./build-frontend-tinylist.sh
 ```
 
-该脚本从固定的 OpenList-Frontend 上游提交构建，应用仓库中的
-前端裁剪补丁，并把产物放入 `public/dist`。
+仓库在 `third_party/pnpm/` 中包含固定版本的 pnpm 和
+`web/pnpm-lock.yaml` 所需的完整依赖存储。脚本校验依赖存储的 SHA-256，
+在临时目录中解包，并使用 `--offline --frozen-lockfile` 安装；不会使用
+Corepack、用户级 pnpm 缓存或包注册表。随后脚本校验离线下载、文件预览等
+已裁剪功能确实不存在、文件夹 ZIP 打包下载确实存在，并把产物放入
+`public/dist`。升级前端到新的上游提交时，使用
+`scripts/sync-frontend.sh <新 commit>` 生成差异，人工审查后再修改 `web/`，
+具体流程见 `web/UPSTREAM.md`。
 
 随后构建原生 Linux 二进制：
 
@@ -80,8 +91,15 @@ Go 版本和工具链以 `go.mod` 为准。前端需要 Node.js、Corepack 和 G
 ./build-tinylist.sh
 ```
 
-构建脚本只能在 Linux 上运行，并生成当前宿主架构的 Linux 二进制。在
-AArch64 主机上，输出为 `dist/tinylist-linux-arm64`。
+Go 依赖已固化在 `vendor/`。构建脚本设置 `GOTOOLCHAIN=local`、
+`GOPROXY=off` 和 `GOSUMDB=off`，并强制使用 `-mod=vendor`；缺少本地工具链
+或 vendored 依赖时会直接失败。脚本只能在 Linux 上运行，并生成当前宿主
+架构的 Linux 二进制。在 AArch64 主机上，输出为
+`dist/tinylist-linux-arm64`。
+
+修改 `go.mod`/`go.sum` 或 `web/package.json`/`web/pnpm-lock.yaml` 后，需要在
+允许联网的维护环境中同步更新 `vendor/` 或 `third_party/pnpm/store-v11.tar.gz`；
+普通构建环境不需要也不允许通过构建脚本更新依赖。
 
 ## 变更验证
 
@@ -90,9 +108,10 @@ AArch64 主机上，输出为 `dist/tinylist-linux-arm64`。
 ```bash
 gofmt -w $(git diff --name-only --diff-filter=ACM -- '*.go')
 go mod tidy
-go test ./...
-go test -race ./drivers/local ./server/webdav
-go test -race ./internal/sign/... ./pkg/sign/... ./server/handles/... ./server/middlewares/...
+go mod vendor
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor ./...
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./drivers/local ./server/webdav
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/sign/... ./pkg/sign/... ./server/handles/... ./server/middlewares/...
 ```
 
 还需完成以下回归检查：

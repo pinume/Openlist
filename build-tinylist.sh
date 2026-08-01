@@ -2,6 +2,10 @@
 
 set -euo pipefail
 
+export GOSUMDB=off
+export GOPROXY=off
+export GOTOOLCHAIN=local
+
 host_os="$(go env GOHOSTOS)"
 if [[ "$host_os" != "linux" ]]; then
   echo "TinyList can only be built on Linux." >&2
@@ -29,6 +33,10 @@ if [[ ! -f public/dist/index.html ]]; then
   echo "Build the TinyList frontend and place its output in public/dist first." >&2
   exit 1
 fi
+if [[ ! -f vendor/modules.txt ]]; then
+  echo "Vendored Go dependencies are missing." >&2
+  exit 1
+fi
 if LC_ALL=C grep -Eqi -- \
   "lightgallery|monaco-editor|pdf\\.js|artplayer|aplayer|docx-preview" \
   public/dist/assets/*.js; then
@@ -52,10 +60,12 @@ if find server -type f \
   exit 1
 fi
 
-go test ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox
+go test -mod=vendor \
+  ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox
 
 mkdir -p "$(dirname "$output")"
 CGO_ENABLED=0 GOOS=linux GOARCH="$target_arch" \
-  go build -trimpath -tags=jsoniter -ldflags="$ldflags" -o "$output" .
+  go build -mod=vendor -trimpath -tags=jsoniter -ldflags="$ldflags" \
+    -o "$output" .
 
 echo "Built $output"

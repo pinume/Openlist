@@ -1,0 +1,18 @@
+{
+  "sidemenu": {
+    "profile": "个人资料",
+    "users": "用户",
+    "storages": "存储",
+    "home": "首页"
+  },
+  "title": "TinyList 管理",
+  "not_admin": "您不是管理员用户，请使用管理员账户登录。",
+  "logout_success": "登出成功",
+  "send": "发送",
+  "receive": "接收",
+  "received_msgs": "收到的消息",
+  "add_storage-tips": "您可能需要在新打开的选项页中填写一些信息。",
+  "messenger-tips": "您可能需要在此选项页中按提示填写一些信息。",
+  "load_default_setting": "加载默认设置",
+  "load_default_setting_success": "加载成功，但尚未保存"
+}

@@ -1,0 +1,10 @@
+ignore:
+  - "types_easyjson.go"
+coverage:
+  range: 60..80
+  round: down
+  precision: 2
+  status:
+    project:
+      default:
+        threshold: 1%
