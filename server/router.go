@@ -136,11 +136,11 @@ func admin(g *gin.RouterGroup) {
 	ms.POST("/send", message.HttpInstance.SendHandle)
 
 	index := g.Group("/index")
-	index.POST("/build", middlewares.SearchIndex, handles.BuildIndex)
-	index.POST("/update", middlewares.SearchIndex, handles.UpdateIndex)
-	index.POST("/stop", middlewares.SearchIndex, handles.StopIndex)
-	index.POST("/clear", middlewares.SearchIndex, handles.ClearIndex)
-	index.GET("/progress", middlewares.SearchIndex, handles.GetProgress)
+	index.POST("/build", middlewares.IndexManage, handles.BuildIndex)
+	index.POST("/update", middlewares.IndexManage, handles.UpdateIndex)
+	index.POST("/stop", middlewares.IndexManage, handles.StopIndex)
+	index.POST("/clear", middlewares.IndexManage, handles.ClearIndex)
+	index.GET("/progress", middlewares.IndexManage, handles.GetProgress)
 
 	scan := g.Group("/scan")
 	scan.POST("/start", handles.StartManualScan)

@@ -72,6 +72,22 @@ func initialSettingsForTest(t *testing.T) []model.SettingItem {
 	return InitialSettings()
 }
 
+func TestDefaultSearchIndexIsNoIndex(t *testing.T) {
+	for _, item := range initialSettingsForTest(t) {
+		if item.Key != conf.SearchIndex {
+			continue
+		}
+		if item.Value != "no_index" {
+			t.Fatalf("default search_index = %q, want no_index", item.Value)
+		}
+		if item.MigrationValue != "" {
+			t.Fatalf("search_index migration value = %q, want empty so existing installs keep their setting", item.MigrationValue)
+		}
+		return
+	}
+	t.Fatal("search_index setting not found")
+}
+
 func TestRemovedServiceSettingsAreAbsent(t *testing.T) {
 	for _, item := range initialSettingsForTest(t) {
 		if _, exists := removedServiceSettingKeys[item.Key]; exists {

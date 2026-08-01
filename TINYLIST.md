@@ -52,6 +52,23 @@ unit 使用 `UMask=0027`。覆盖已有文件时沿用原文件权限，包括�
 刷新时重建。目录列表为避免逐项打开文件不返回精确创建时间；单对象详情仍会读取
 普通文件和目录的创建时间。
 
+## 搜索
+
+新安装的 `search_index` 默认值为 `no_index`：不建索引、不写 SQLite/Bleve/
+Meilisearch，每次搜索时通过 `fs.List` 实时递归遍历 `parent` 目录，因此天然
+继承用户 `base_path`、Meta 读权限、隐藏规则、虚拟目录以及 Local/Dropbox 各自
+的驱动语义。已有安装保持数据库中原来的取值（包括 `none`），不会被自动改成
+`no_index`；管理员仍可在设置中切换到数据库索引或完全关闭搜索（`none`）。
+
+`no_index` 只适合个人使用或小规模目录：Dropbox 下的实时搜索会为遍历到的每一层
+目录发出远程 API 请求，文件数量大时会明显变慢。目录层级较深或文件数量较多时，
+建议改用 `database`（或其他索引方案）以获得更快的响应。
+
+实时搜索最多遍历 `max_index_depth` 层、最多收集并统计 1000 条匹配结果，超出
+后停止遍历；权限过滤在计算 `total` 和分页之前完成，避免把用户无权访问的内容
+计入总数或翻页翻到空页。`no_index` 模式下 `/api/admin/index/build|update|
+stop|clear|progress` 接口不可用（与 `none` 相同），因为没有索引可构建或清理。
+
 ## 用户隔离
 
 沿用上游 OpenList 的用户模型：
@@ -133,6 +150,15 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/s
 - 确认 `/s3` 及独立 S3 端口不可用，生成的 `config.json` 不再包含 `s3` 配置段。
 - 确认压缩包元数据响应不再返回指向 `/ad`、`/ae` 的 `raw_url` 或 Archive `sign`。
 - 使用已有数据目录升级时，确认旧游客账号被清理，其他用户、存储和权限数据保持不变。
+- 使用全新数据目录启动，确认 `search_index` 默认为 `no_index` 且无需构建索引即可在
+  Local 和 Dropbox 挂载下搜索到文件；使用已有数据目录升级，确认原来的 `search_index`
+  取值（包括 `none`）不被覆盖。
+- 在 `no_index` 模式下确认 `/api/admin/index/build|update|stop|clear|progress` 仍
+  返回不可用，`/api/fs/search` 正常工作。
+- 使用受限用户（`base_path`、Meta 隐藏或读权限限制）验证 `no_index` 搜索结果和分页
+  总数只包含该用户可见的内容。
+- 分别复制/移动同名同大小文件（应跳过）与同名不同大小文件（应报错并要求
+  `overwrite=true`），并确认同名目录不会仅因总大小相同被跳过。
 
 如果当前环境无法执行上述命令，提交或 Pull Request 必须明确写明未运行的项目，不得将静态检查描述为编译或测试通过。
 
