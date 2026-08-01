@@ -111,14 +111,26 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath, ds
 		return nil, errors.WithMessage(err, "failed get dst storage")
 	}
 
-	// When skipExisting is set, always go through the per-object
-	// FileTransferTask below instead of a driver's native same-storage
-	// Copy: the driver call moves/copies a whole file or directory tree in
-	// one opaque step, so there is no point at which a per-file size
-	// comparison could run. Routing through the task keeps the leaf-level
-	// skip/overwrite decision consistent across drivers and across
-	// same-storage and cross-storage copies.
-	if srcStorage.GetStorage() == dstStorage.GetStorage() && !skipExisting {
+	if srcStorage.GetStorage() == dstStorage.GetStorage() {
+		// Check the size match before touching the driver's native Copy,
+		// which would otherwise open the source (blocking on a FIFO,
+		// dereferencing a symlink instead of copying it, or losing
+		// reflink/special-file handling) even when the file is about to
+		// be skipped. This only ever fires for a plain file: a directory
+		// source always falls through to the native Copy below, same as
+		// before skip_existing existed.
+		if skipExisting {
+			if srcObj, srcErr := op.Get(ctx, srcStorage, srcObjActualPath); srcErr == nil {
+				checkDstName := dstName
+				if checkDstName == "" {
+					checkDstName = srcObj.GetName()
+				}
+				if dstObj, dstErr := op.Get(ctx, dstStorage, stdpath.Join(dstDirActualPath, checkDstName)); dstErr == nil &&
+					shouldSkipExistingFile(srcObj, dstObj) {
+					return nil, nil
+				}
+			}
+		}
 		if utils.IsBool(skipHook...) {
 			ctx = context.WithValue(ctx, conf.SkipHookKey, struct{}{})
 		}
@@ -260,22 +272,27 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 		return nil
 	}
 
-	t.Status = "getting src object link"
-	link, srcObj, err := op.Link(t.Ctx(), t.SrcStorage, t.SrcActualPath, model.LinkArgs{})
-	if err != nil {
-		return errors.WithMessagef(err, "failed get [%s] link", t.SrcActualPath)
-	}
 	dstName := srcObj.GetName()
 	if t.DstName != "" {
 		dstName = t.DstName
 	}
+	// Check before requesting a link: op.Link can open a source file (or,
+	// for a remote driver, request a download URL), which must not happen
+	// for a file that turns out to be skipped.
 	if t.TaskType == copy && t.SkipExisting {
 		dstObj, dstErr := op.Get(t.Ctx(), t.DstStorage, stdpath.Join(t.DstActualPath, dstName))
 		if dstErr == nil && shouldSkipExistingFile(srcObj, dstObj) {
-			_ = link.Close()
+			t.SetTotalBytes(srcObj.GetSize())
+			t.SetProgress(100)
 			t.Status = "skipped: destination file already exists with the same size"
 			return nil
 		}
+	}
+
+	t.Status = "getting src object link"
+	link, srcObj, err := op.Link(t.Ctx(), t.SrcStorage, t.SrcActualPath, model.LinkArgs{})
+	if err != nil {
+		return errors.WithMessagef(err, "failed get [%s] link", t.SrcActualPath)
 	}
 	// any link provided is seekable
 	streamObj := srcObj
