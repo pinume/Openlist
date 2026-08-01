@@ -1,6 +1,7 @@
 package handles
 
 import (
+	"context"
 	"fmt"
 	stdpath "path"
 	"strings"
@@ -133,6 +134,7 @@ func FsMove(c *gin.Context) {
 			return
 		}
 		req.Names[i] = srcPath
+		// skip_existing only applies to copy, not move: see FsCopy.
 		if !req.Overwrite {
 			base := stdpath.Base(srcPath)
 			if base == "." || base == "/" {
@@ -140,12 +142,8 @@ func FsMove(c *gin.Context) {
 				return
 			}
 			if res, _ := fs.Get(c.Request.Context(), stdpath.Join(dstDir, base), &fs.GetArgs{NoLog: true}); res != nil {
-				if !req.SkipExisting {
-					common.ErrorStrResp(c, fmt.Sprintf("file [%s] exists", name), 403)
-					return
-				}
-				req.Names[i] = ""
-				continue
+				common.ErrorStrResp(c, fmt.Sprintf("file [%s] exists", name), 403)
+				return
 			}
 		}
 	}
@@ -250,12 +248,18 @@ func FsCopy(c *gin.Context) {
 				return
 			}
 			if res, _ := fs.Get(c.Request.Context(), stdpath.Join(dstDir, base), &fs.GetArgs{NoLog: true}); res != nil {
-				if !req.SkipExisting && !req.Merge {
+				switch {
+				case req.Merge && res.IsDir():
+					// existing directory: proceed as a merge, which
+					// already dedups per child name during the task.
+				case req.SkipExisting && !res.IsDir():
+					// existing file: don't decide here. The actual
+					// skip-vs-overwrite call is deferred to the copy
+					// task, which compares sizes file by file (including
+					// nested files if src is a directory).
+				default:
 					common.ErrorStrResp(c, fmt.Sprintf("file [%s] exists", name), 403)
 					return
-				} else if !req.Merge || !res.IsDir() {
-					req.Names[i] = ""
-					continue
 				}
 			}
 		}
@@ -263,6 +267,10 @@ func FsCopy(c *gin.Context) {
 
 	// Create all tasks immediately without any synchronous validation
 	// All validation will be done asynchronously in the background
+	copyCtx := c.Request.Context()
+	if req.SkipExisting {
+		copyCtx = context.WithValue(copyCtx, conf.SkipExistingKey, struct{}{})
+	}
 	var addedTasks []task.TaskExtensionInfo
 	for i, p := range req.Names {
 		if p == "" {
@@ -270,9 +278,9 @@ func FsCopy(c *gin.Context) {
 		}
 		var t task.TaskExtensionInfo
 		if req.Merge {
-			t, err = fs.Merge(c.Request.Context(), p, dstDir, len(req.Names) > i+1)
+			t, err = fs.Merge(copyCtx, p, dstDir, len(req.Names) > i+1)
 		} else {
-			t, err = fs.Copy(c.Request.Context(), p, dstDir, len(req.Names) > i+1)
+			t, err = fs.Copy(copyCtx, p, dstDir, len(req.Names) > i+1)
 		}
 		if t != nil {
 			addedTasks = append(addedTasks, t)

@@ -66,6 +66,10 @@ type TaskData struct {
 	DstStorage    driver.Driver `json:"-"`
 	SrcStorageMp  string        `json:"src_storage_mp"`
 	DstStorageMp  string        `json:"dst_storage_mp"`
+	// SkipExisting only applies to copy tasks: when a destination file
+	// already exists with the same name and size, the leaf-level copy is
+	// skipped instead of re-uploaded. It has no effect on move.
+	SkipExisting bool `json:"skip_existing,omitempty"`
 }
 
 func (t *TaskData) GetStatus() string {

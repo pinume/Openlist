@@ -101,6 +101,7 @@ func (t *FileTransferTask) SetRetry(retry int, maxRetry int) {
 }
 
 func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath, dstName string, skipHook ...bool) (task.TaskExtensionInfo, error) {
+	skipExisting := taskType == copy && ctx.Value(conf.SkipExistingKey) != nil
 	srcStorage, srcObjActualPath, err := op.GetStorageAndActualPath(srcObjPath)
 	if err != nil {
 		return nil, errors.WithMessage(err, "failed get src storage")
@@ -110,7 +111,14 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath, ds
 		return nil, errors.WithMessage(err, "failed get dst storage")
 	}
 
-	if srcStorage.GetStorage() == dstStorage.GetStorage() {
+	// When skipExisting is set, always go through the per-object
+	// FileTransferTask below instead of a driver's native same-storage
+	// Copy: the driver call moves/copies a whole file or directory tree in
+	// one opaque step, so there is no point at which a per-file size
+	// comparison could run. Routing through the task keeps the leaf-level
+	// skip/overwrite decision consistent across drivers and across
+	// same-storage and cross-storage copies.
+	if srcStorage.GetStorage() == dstStorage.GetStorage() && !skipExisting {
 		if utils.IsBool(skipHook...) {
 			ctx = context.WithValue(ctx, conf.SkipHookKey, struct{}{})
 		}
@@ -137,6 +145,7 @@ func transfer(ctx context.Context, taskType taskType, srcObjPath, dstDirPath, ds
 			DstName:       dstName,
 			SrcStorageMp:  srcStorage.GetStorage().MountPath,
 			DstStorageMp:  dstStorage.GetStorage().MountPath,
+			SkipExisting:  skipExisting,
 		},
 		TaskType: taskType,
 	}
@@ -239,6 +248,7 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 					DstName:       "",
 					SrcStorageMp:  t.SrcStorageMp,
 					DstStorageMp:  t.DstStorageMp,
+					SkipExisting:  t.SkipExisting,
 				},
 				groupID: t.groupID,
 			})
@@ -254,6 +264,18 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 	link, srcObj, err := op.Link(t.Ctx(), t.SrcStorage, t.SrcActualPath, model.LinkArgs{})
 	if err != nil {
 		return errors.WithMessagef(err, "failed get [%s] link", t.SrcActualPath)
+	}
+	dstName := srcObj.GetName()
+	if t.DstName != "" {
+		dstName = t.DstName
+	}
+	if t.TaskType == copy && t.SkipExisting {
+		dstObj, dstErr := op.Get(t.Ctx(), t.DstStorage, stdpath.Join(t.DstActualPath, dstName))
+		if dstErr == nil && shouldSkipExistingFile(srcObj, dstObj) {
+			_ = link.Close()
+			t.Status = "skipped: destination file already exists with the same size"
+			return nil
+		}
 	}
 	// any link provided is seekable
 	streamObj := srcObj
@@ -271,6 +293,17 @@ func (t *FileTransferTask) RunWithNextTaskCallback(f func(nextTask *FileTransfer
 	t.SetTotalBytes(ss.GetSize())
 	t.Status = "uploading"
 	return op.Put(context.WithValue(t.Ctx(), conf.SkipHookKey, struct{}{}), t.DstStorage, t.DstActualPath, ss, t.SetProgress)
+}
+
+// shouldSkipExistingFile reports whether a copy of src onto dst should be
+// skipped instead of overwritten. It only ever applies to two plain files
+// with the same size: a directory on either side, or a size mismatch,
+// always leads to a (re-)copy instead of a silent skip, since neither a
+// directory's total size nor a partially-copied file reliably means the
+// contents already match.
+func shouldSkipExistingFile(src, dst model.Obj) bool {
+	return !src.IsDir() && !dst.IsDir() &&
+		src.GetSize() >= 0 && src.GetSize() == dst.GetSize()
 }
 
 var (
