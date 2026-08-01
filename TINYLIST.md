@@ -157,8 +157,11 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/s
   返回不可用，`/api/fs/search` 正常工作。
 - 使用受限用户（`base_path`、Meta 隐藏或读权限限制）验证 `no_index` 搜索结果和分页
   总数只包含该用户可见的内容。
-- 分别复制/移动同名同大小文件（应跳过）与同名不同大小文件（应报错并要求
-  `overwrite=true`），并确认同名目录不会仅因总大小相同被跳过。
+- 分别复制同名同大小文件（应跳过，目标内容不变）与同名不同大小文件（应重新
+  复制并覆盖目标），确认 `skip_existing` 仅影响 COPY、不影响 MOVE，并确认
+  同名目录不会仅因总大小相同被跳过。
+- 用命名管道（FIFO）作为复制源验证 `skip_existing`：目标不存在时应走驱动原生
+  复制正常完成，不应阻塞在打开源文件上。
 
 如果当前环境无法执行上述命令，提交或 Pull Request 必须明确写明未运行的项目，不得将静态检查描述为编译或测试通过。
 
