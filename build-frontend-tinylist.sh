@@ -4,42 +4,14 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 web_root="$repo_root/web"
-pnpm_root="$repo_root/third_party/pnpm/11.10.0"
-pnpm_cli="$pnpm_root/bin/pnpm.mjs"
-pnpm_store_archive="$repo_root/third_party/pnpm/store-v11.tar.gz"
-pnpm_store_sha256="1d27c1ef5b3dd508020bb32a19a0752754b8af5f08c9b64ea1fe1327116388c8"
 
 command -v grep >/dev/null
-command -v node >/dev/null
-command -v sha256sum >/dev/null
-command -v tar >/dev/null
-
-if [[ ! -f "$pnpm_cli" || ! -f "$pnpm_store_archive" ]]; then
-  echo "Vendored pnpm or its offline store is missing." >&2
-  exit 1
-fi
-
-printf '%s  %s\n' "$pnpm_store_sha256" "$pnpm_store_archive" |
-  sha256sum --check -
-
-work_root="$(mktemp -d)"
-cleanup() {
-  rm -rf -- "$work_root"
-}
-trap cleanup EXIT
-
-tar -xzf "$pnpm_store_archive" -C "$work_root"
+command -v corepack >/dev/null
 
 (
   cd "$web_root"
-  CI=true PNPM_DISABLE_SELF_UPDATE_CHECK=1 \
-    pnpm_config_store_dir="$work_root/store" \
-    node "$pnpm_cli" install \
-      --offline \
-      --frozen-lockfile
-  CI=true PNPM_DISABLE_SELF_UPDATE_CHECK=1 \
-    pnpm_config_store_dir="$work_root/store" \
-    node "$pnpm_cli" build
+  CI=true corepack pnpm install --frozen-lockfile
+  CI=true corepack pnpm build
   if [[ -d dist/static/monaco-editor/vs ]]; then
     find dist/static/monaco-editor/vs -type f \
       -name 'nls.messages.*.js.js' \

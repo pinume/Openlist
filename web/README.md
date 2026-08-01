@@ -14,9 +14,10 @@ Run the TinyList frontend build from the repository root:
 ./build-frontend-tinylist.sh
 ```
 
-The repository includes pnpm and every locked dependency. The build runs
-with pnpm offline and does not access npm, GitHub releases, or Crowdin.
-Running `web/build.sh` without arguments delegates to the same root script.
+The build installs dependencies from `pnpm-lock.yaml` via Corepack pnpm,
+which requires network access to npm; it does not access GitHub releases
+or Crowdin. Running `web/build.sh` without arguments delegates to the same
+root script.
 
 ## LICENSE
 

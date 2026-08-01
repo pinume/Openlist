@@ -65,25 +65,25 @@ unit 使用 `UMask=0027`。覆盖已有文件时沿用原文件权限，包括�
 
 ## 构建
 
-构建过程完全离线，不会访问 Go Proxy、npm、GitHub、Crowdin 或其他上游服务。
-构建机需要预装 `go.mod` 指定的 Go 工具链以及 Node.js 22.13 或更高版本；
-工具链本身不在仓库内，构建脚本不会尝试在线安装或升级工具链。
+Go 后端构建完全离线，不会访问 Go Proxy 或其他上游服务；前端依赖安装需要
+联网访问 npm registry（Crowdin、GitHub 等其他上游服务仍不在构建期访问）。
+构建机需要预装 `go.mod` 指定的 Go 工具链、Node.js 22.13 或更高版本以及
+Corepack；Go 工具链本身不在仓库内，构建脚本不会尝试在线安装或升级它。
 
 前端源码已固化提交在 `web/`（导入来源、上游基线提交、许可证见
-`web/UPSTREAM.md`），不再在构建期联网拉取上游仓库。
+`web/UPSTREAM.md`），不再在构建期联网拉取上游仓库；但 `web/` 的第三方依赖
+（`node_modules`）按 `web/pnpm-lock.yaml` 在构建期通过 Corepack pnpm 从
+npm registry 安装，不再随仓库提交离线依赖存储。
 
 ```bash
 ./build-frontend-tinylist.sh
 ```
 
-仓库在 `third_party/pnpm/` 中包含固定版本的 pnpm 和
-`web/pnpm-lock.yaml` 所需的完整依赖存储。脚本校验依赖存储的 SHA-256，
-在临时目录中解包，并使用 `--offline --frozen-lockfile` 安装；不会使用
-Corepack、用户级 pnpm 缓存或包注册表。随后脚本校验离线下载、文件预览等
-已裁剪功能确实不存在、文件夹 ZIP 打包下载确实存在，并把产物放入
-`public/dist`。升级前端到新的上游提交时，使用
-`scripts/sync-frontend.sh <新 commit>` 生成差异，人工审查后再修改 `web/`，
-具体流程见 `web/UPSTREAM.md`。
+脚本用 `corepack pnpm install --frozen-lockfile` 按锁文件精确安装依赖，
+`corepack pnpm build` 构建产物。随后脚本校验离线下载、文件预览等已裁剪
+功能确实不存在、文件夹 ZIP 打包下载确实存在，并把产物放入 `public/dist`。
+升级前端到新的上游提交时，使用 `scripts/sync-frontend.sh <新 commit>`
+生成差异，人工审查后再修改 `web/`，具体流程见 `web/UPSTREAM.md`。
 
 随后构建原生 Linux 二进制：
 
@@ -97,9 +97,10 @@ Go 依赖已固化在 `vendor/`。构建脚本设置 `GOTOOLCHAIN=local`、
 架构的 Linux 二进制。在 AArch64 主机上，输出为
 `dist/tinylist-linux-arm64`。
 
-修改 `go.mod`/`go.sum` 或 `web/package.json`/`web/pnpm-lock.yaml` 后，需要在
-允许联网的维护环境中同步更新 `vendor/` 或 `third_party/pnpm/store-v11.tar.gz`；
-普通构建环境不需要也不允许通过构建脚本更新依赖。
+修改 `go.mod`/`go.sum` 后，需要在允许联网的维护环境中同步更新 `vendor/`；
+普通构建环境不需要也不允许通过构建脚本更新 Go 依赖。修改
+`web/package.json`/`web/pnpm-lock.yaml` 后无需额外同步步骤，下次构建会
+按新锁文件联网安装。
 
 ## 变更验证
 
