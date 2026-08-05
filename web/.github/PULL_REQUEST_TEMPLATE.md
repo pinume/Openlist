@@ -93,7 +93,6 @@ Tools used / 使用工具:
 - [ ] ChatGPT
 - [ ] Codex
 - [ ] GitHub Copilot
-- [ ] Claude
 - [ ] Gemini
 - [ ] Other (please specify) / 其他（请注明）:
 
