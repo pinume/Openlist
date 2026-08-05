@@ -53,7 +53,6 @@ Examples:
 
 - `Co-authored-by: Codex <267193182+codex@users.noreply.github.com>`
 - `Co-authored-by: GitHub Copilot <copilot@github.com>`
-- `Co-authored-by: Claude <81847+claude@users.noreply.github.com>`
 
 If you are not one of the listed assistants, do not add a `Co-authored-by` trailer.
 
