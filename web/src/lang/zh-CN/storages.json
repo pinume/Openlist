@@ -2,7 +2,6 @@
   "common": {
     "mount_path": "站点路径",
     "mount_path-tips": "在站点中显示的路径，必须唯一，例如 /files",
-    "driver": "驱动",
     "order": "序号",
     "order-tips": "用于多个挂载之间的排序",
     "usage": "磁盘用量",

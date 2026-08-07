@@ -66,7 +66,7 @@ const Item = (props: ItemProps) => {
             : `drivers.${props.driver}.${props.name}`,
         )}
       </FormLabel>
-      <Switch fallback={<Center>{t("settings.unknown_type")}</Center>}>
+      <Switch fallback={<Center>未知类型</Center>}>
         <Match when={props.type === Type.String}>
           <Input
             id={props.name}

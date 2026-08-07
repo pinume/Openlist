@@ -10,11 +10,5 @@
     "root_folder_path-tips": "服务器上的绝对路径，例如 /data/files",
     "show_hidden": "显示隐藏文件",
     "show_hidden-tips": "列表中显示以点开头的隐藏目录和文件"
-  },
-  "config": {
-    "Local": {}
-  },
-  "drivers": {
-    "Local": "本机存储"
   }
 }
