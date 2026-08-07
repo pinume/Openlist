@@ -78,3 +78,122 @@ stop|clear|progress` 接口不可用（与 `none` 相同），因为没有索引
 - Meta 的读写用户列表可以进一步限制具体目录。
 
 管理员集中配置 Local 挂载，再通过管理 API 或管理界面设置用户的 `base_path` 和权限。
+
+## 构建
+
+Go 后端构建完全离线，不会访问 Go Proxy 或其他上游服务；前端依赖安装需要
+联网访问 npm registry（Crowdin、GitHub 等其他上游服务仍不在构建期访问）。
+构建机需要预装 `go.mod` 指定的 Go 工具链、Node.js 22.13 或更高版本以及
+Corepack；Go 工具链本身不在仓库内，构建脚本不会尝试在线安装或升级它。
+
+前端源码已固化提交在 `web/`（导入来源、上游基线提交、许可证见
+`web/UPSTREAM.md`），不再在构建期联网拉取上游仓库；但 `web/` 的第三方依赖
+（`node_modules`）按 `web/pnpm-lock.yaml` 在构建期通过 Corepack pnpm 从
+npm registry 安装，不再随仓库提交离线依赖存储。
+
+```bash
+./build-frontend-tinylist.sh
+```
+
+脚本用 `corepack pnpm install --frozen-lockfile` 按锁文件精确安装依赖，
+`corepack pnpm build` 构建产物。随后脚本校验离线下载、文件预览等已裁剪
+功能确实不存在、文件夹 ZIP 打包下载确实存在，并把产物放入 `public/dist`。
+升级前端到新的上游提交时，使用 `scripts/sync-frontend.sh <新 commit>`
+生成差异，人工审查后再修改 `web/`，具体流程见 `web/UPSTREAM.md`。
+
+随后构建原生 Linux 二进制：
+
+```bash
+./build-tinylist.sh
+```
+
+Go 依赖已固化在 `vendor/`。构建脚本设置 `GOTOOLCHAIN=local`、
+`GOPROXY=off` 和 `GOSUMDB=off`，并强制使用 `-mod=vendor`；缺少本地工具链
+或 vendored 依赖时会直接失败。脚本只能在 Linux 上运行，并生成当前宿主
+架构的 Linux 二进制。在 AArch64 主机上，输出为
+`dist/tinylist-linux-arm64`。
+
+修改 `go.mod`/`go.sum` 后，需要在允许联网的维护环境中同步更新 `vendor/`；
+普通构建环境不需要也不允许通过构建脚本更新 Go 依赖。修改
+`web/package.json`/`web/pnpm-lock.yaml` 后无需额外同步步骤，下次构建会
+按新锁文件联网安装。
+
+## 变更验证
+
+合并或发布精简相关改动前，应在具备 `go.mod` 指定 Go 工具链的环境中执行：
+
+```bash
+gofmt -w $(git diff --name-only --diff-filter=ACM -- '*.go')
+go mod tidy
+go mod vendor
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor ./...
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./drivers/local ./server/webdav
+GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/sign/... ./pkg/sign/... ./server/handles/... ./server/middlewares/...
+```
+
+还需完成以下回归检查：
+
+- 使用管理员和普通用户验证登录、退出、Token 重置及管理员 API 权限。
+- 验证用户 `base_path`、Meta 密码、读写用户列表和隐藏文件权限仍能限制文件列表、详情、搜索及压缩包列表。
+- 请求 `/api/fs/list` 时省略 `per_page` 并分别设置 `page=3`、`page=5`，确认返回空页而不是 HTTP 500。
+- 验证 Local 上传、下载、复制、移动、删除和文件夹流式 ZIP 下载。
+- 在启用目录大小统计的 Local 挂载上依次执行刷新、上传、删除、目录重命名和再次
+  刷新，使用包含隐藏文件的独立 `filepath.WalkDir` 统计结果核对根目录及父目录大小。
+- 验证 Local 根内相对符号链接可访问，根外和绝对目标符号链接不能越过存储根。
+- 验证 WebDAV COPY/MOVE 的 `Overwrite: F` 返回 412，覆盖成功返回 204，新建目标
+  返回 201，并且目标名称与源名称不同时不会碰撞同目录的无关文件。
+- 验证 WebDAV、FTP、SFTP 在缺少或无效用户上下文时拒绝访问，正常账号仍可按权限读写。
+- 重置管理员 Token 的同时并发访问签名下载接口，并使用 `go test -race` 确认没有签名实例数据竞争。
+- 确认浏览器下载凭证只绑定一个路径且约五分钟后失效，升级时会删除旧的 `link_expiration` 设置。
+- 使用旧 SHA-256 密码记录登录，确认成功后数据库记录自动升级为 Argon2id，错误密码仍被拒绝。
+- 确认 `/s3` 及独立 S3 端口不可用，生成的 `config.json` 不再包含 `s3` 配置段。
+- 确认压缩包元数据响应不再返回指向 `/ad`、`/ae` 的 `raw_url` 或 Archive `sign`。
+- 使用已有数据目录升级时，确认旧游客账号被清理，其他用户、存储和权限数据保持不变。
+- 使用全新数据目录启动，确认 `search_index` 默认为 `no_index` 且无需构建索引即可在
+  Local 挂载下搜索到文件；使用已有数据目录升级，确认原来的 `search_index`
+  取值（包括 `none`）不被覆盖。
+- 在 `no_index` 模式下确认 `/api/admin/index/build|update|stop|clear|progress` 仍
+  返回不可用，`/api/fs/search` 正常工作。
+- 使用受限用户（`base_path`、Meta 隐藏或读权限限制）验证 `no_index` 搜索结果和分页
+  总数只包含该用户可见的内容。
+- 分别复制同名同大小文件（应跳过，目标内容不变）与同名不同大小文件（应重新
+  复制并覆盖目标），确认 `skip_existing` 仅影响 COPY、不影响 MOVE，并确认
+  同名目录不会仅因总大小相同被跳过。
+- 用命名管道（FIFO）作为复制源验证 `skip_existing`：目标不存在时应走驱动原生
+  复制正常完成，不应阻塞在打开源文件上。
+
+如果当前环境无法执行上述命令，提交或 Pull Request 必须明确写明未运行的项目，不得将静态检查描述为编译或测试通过。
+
+## Linux 安装
+
+创建服务账号和目录：
+
+```bash
+sudo useradd --system --home /opt/tinylist --shell /usr/sbin/nologin tinylist
+sudo install -d -o tinylist -g tinylist -m 0750 /opt/tinylist/data
+sudo install -o root -g root -m 0755 tinylist /opt/tinylist/tinylist
+sudo install -o root -g root -m 0644 deploy/tinylist.service /etc/systemd/system/tinylist.service
+```
+
+首次启动会生成管理员密码，并且只输出到服务控制台。也可以提前指定：
+
+```bash
+sudo systemctl edit tinylist
+```
+
+```ini
+[Service]
+Environment=OPENLIST_ADMIN_PASSWORD=请替换为高强度密码
+```
+
+启用服务：
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tinylist
+sudo journalctl -u tinylist -f
+```
+
+首次启动会创建 `/opt/tinylist/data/config.json`。默认 HTTP 监听地址为
+`0.0.0.0:5244`。程序不提供内置 HTTPS、FTP、SFTP、S3 或 MCP 服务。建议使用
+Caddy 或 Nginx 提供 TLS，并通过主机防火墙限制外部直接访问 5244 端口。
