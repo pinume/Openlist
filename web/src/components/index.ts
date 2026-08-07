@@ -1,7 +1,6 @@
 export * from "./FullLoading"
 export * from "./FolderTree"
 export * from "./EnhancedFolderTree"
-export * from "./MultiPathInput"
 export * from "./Wether"
 export * from "./LinkWithBase"
 export * from "./ImageWithError"
