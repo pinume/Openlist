@@ -1,27 +1,20 @@
 import {
-  Badge,
-  Box,
   Button,
   HStack,
-  Td,
-  Text,
-  Tr,
-  useColorModeValue,
-  VStack,
   Progress,
   ProgressIndicator,
   ProgressLabel,
+  Td,
+  Tr,
 } from "@hope-ui/solid"
 import { Show } from "solid-js"
 import { useFetch, useRouter, useT } from "~/hooks"
-import { getMainColor } from "~/store"
 import { MountDetails, PEmptyResp, Storage } from "~/types"
 import {
   handleResp,
   handleRespWithNotifySuccess,
   notify,
   r,
-  showDiskUsage,
   usedPercentage,
   toReadableUsage,
   nearlyFull,
@@ -105,69 +98,11 @@ function StorageUsage(props: { details: MountDetails | undefined }) {
   )
 }
 
-export function StorageGridItem(props: StorageProps) {
-  const t = useT()
-  return (
-    <VStack
-      w="$full"
-      spacing="$2"
-      rounded="$lg"
-      border="1px solid $neutral7"
-      background={useColorModeValue("$neutral2", "$neutral3")()}
-      // alignItems="start"
-      p="$3"
-      _hover={{
-        border: `1px solid ${getMainColor()}`,
-      }}
-    >
-      <HStack spacing="$2">
-        <Text
-          fontWeight="$medium"
-          css={{
-            wordBreak: "break-all",
-          }}
-        >
-          {props.storage.mount_path}
-        </Text>
-        <Badge colorScheme="info">
-          {t(`drivers.drivers.${props.storage.driver}`)}
-        </Badge>
-        <Show when={props.storage.mount_details}>
-          <Badge
-            colorScheme={
-              nearlyFull(props.storage.mount_details!) ? "danger" : "success"
-            }
-          >
-            {toReadableUsage(props.storage.mount_details!)}
-          </Badge>
-        </Show>
-      </HStack>
-      <HStack>
-        <Text>{t("storages.common.status")}:&nbsp;</Text>
-        <Box
-          css={{ wordBreak: "break-all" }}
-          overflowX="auto"
-          innerHTML={t(
-            `storages.table_fields.status.${props.storage.status}`,
-            undefined,
-            props.storage.status,
-          )}
-        />
-      </HStack>
-      <Text css={{ wordBreak: "break-all" }}>{props.storage.remark}</Text>
-      <HStack spacing="$2">
-        <StorageOp {...props} />
-      </HStack>
-    </VStack>
-  )
-}
-
 export function StorageListItem(props: StorageProps) {
   const t = useT()
   return (
     <Tr>
       <Td>{props.storage.mount_path}</Td>
-      <Td>{t(`drivers.drivers.${props.storage.driver}`)}</Td>
       <Td>{props.storage.order}</Td>
       <Td>
         <StorageUsage details={props.storage.mount_details} />

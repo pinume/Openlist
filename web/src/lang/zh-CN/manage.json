@@ -2,7 +2,7 @@
   "sidemenu": {
     "profile": "个人资料",
     "users": "用户",
-    "storages": "存储",
+    "storages": "目录挂载",
     "home": "首页"
   },
   "title": "TinyList 管理",

@@ -1,18 +1,11 @@
 {
   "common": {
-    "export": "导出",
-    "export_title": "导出存储为 JSON",
-    "export_tips": "请复制上面的存储 JSON。",
-    "import": "导入",
-    "import_title": "从 JSON 导入存储",
-    "import_success": "导入成功！",
-    "import_tips": "粘贴导出的 JSON 存储以导入。",
-    "mount_path": "挂载路径",
-    "mount_path-tips": "要挂载的路径，必须是唯一且不能重复",
+    "mount_path": "站点路径",
+    "mount_path-tips": "在站点中显示的路径，必须唯一，例如 /files",
     "driver": "驱动",
     "order": "序号",
-    "order-tips": "用于排序",
-    "usage": "使用情况",
+    "order-tips": "用于多个挂载之间的排序",
+    "usage": "磁盘用量",
     "status": "状态",
     "remark": "备注",
     "cache_expiration": "缓存过期时间",
@@ -44,11 +37,16 @@
     },
     "extract_folder": "文件夹顺序",
     "extract_folders": {
-      "front": " 文件夹置顶",
+      "front": "文件夹置顶",
       "back": "文件夹置底"
     },
     "enable_sign": "启用签名",
     "disable_index": "禁用索引"
+  },
+  "fields": {
+    "recycle_enable": "使用回收站",
+    "recycle_path": "回收站目录",
+    "recycle_tips": "相对服务器目录的路径，必须在根目录内。关闭则删除文件时永久删除。"
   },
   "table_fields": {
     "status": {
@@ -57,9 +55,15 @@
     }
   },
   "other": {
-    "start_load_success": "开始加载",
-    "load_all": "全部重新加载",
-    "filter_by_driver": "按驱动筛选",
-    "table_layout": "表格布局"
+    "start_load_success": "已开始重新加载",
+    "load_all": "重新加载全部",
+    "advanced": "高级选项",
+    "save_success_hint": "已保存。可在「用户」中设置 base_path，限制用户可见范围。"
+  },
+  "page": {
+    "add": "添加挂载",
+    "edit": "编辑挂载",
+    "empty": "还没有挂载目录。添加后，用户才能按路径访问文件。",
+    "empty_hint": "例如：服务器 /data/files → 站点路径 /files"
   }
 }
