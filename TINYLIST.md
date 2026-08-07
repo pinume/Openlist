@@ -8,9 +8,8 @@
 - 文件列表、文件详情、下载和 WebDAV 均要求认证。
 - 浏览器直接下载使用登录后签发、固定五分钟有效的路径凭证；不提供永久下载或分享链接。
 - 不包含游客角色、内置 `guest` 账号或匿名 API 访问。
-- 仅包含 Local 和 Dropbox 两种存储驱动。
+- 仅包含 Local 存储驱动。
 - 不提供 S3 存储驱动、S3 兼容 API 或独立 S3 监听服务。
-- Dropbox 下载强制经过 TinyList 代理，使私有下载路由能够检查登录状态和用户根目录。
 - 不包含离线下载和 Torrent 专用集成。
 - 不包含需要 CGO/libfuse 的 FUSE 本地挂载能力。
 - 管理端不包含分享、备份与还原、关于和文档入口。
@@ -56,11 +55,11 @@ unit 使用 `UMask=0027`。覆盖已有文件时沿用原文件权限，包括�
 
 新安装的 `search_index` 默认值为 `no_index`：不建索引、不写 SQLite/Bleve/
 Meilisearch，每次搜索时通过 `fs.List` 实时递归遍历 `parent` 目录，因此天然
-继承用户 `base_path`、Meta 读权限、隐藏规则、虚拟目录以及 Local/Dropbox 各自
+继承用户 `base_path`、Meta 读权限、隐藏规则、虚拟目录以及 Local
 的驱动语义。已有安装保持数据库中原来的取值（包括 `none`），不会被自动改成
 `no_index`；管理员仍可在设置中切换到数据库索引或完全关闭搜索（`none`）。
 
-`no_index` 只适合个人使用或小规模目录：Dropbox 下的实时搜索会为遍历到的每一层
+`no_index` 只适合个人使用或小规模目录：实时搜索会为遍历到的每一层
 目录发出远程 API 请求，文件数量大时会明显变慢。目录层级较深或文件数量较多时，
 建议改用 `database`（或其他索引方案）以获得更快的响应。
 
@@ -78,7 +77,7 @@ stop|clear|progress` 接口不可用（与 `none` 相同），因为没有索引
 - `permission` 控制上传、重命名、移动、复制、删除、WebDAV 和压缩包操作。
 - Meta 的读写用户列表可以进一步限制具体目录。
 
-管理员集中配置 Local、Dropbox 挂载，再通过管理 API 或管理界面设置用户的 `base_path` 和权限。
+管理员集中配置 Local 挂载，再通过管理 API 或管理界面设置用户的 `base_path` 和权限。
 
 ## 构建
 
@@ -137,7 +136,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/s
 - 使用管理员和普通用户验证登录、退出、Token 重置及管理员 API 权限。
 - 验证用户 `base_path`、Meta 密码、读写用户列表和隐藏文件权限仍能限制文件列表、详情、搜索及压缩包列表。
 - 请求 `/api/fs/list` 时省略 `per_page` 并分别设置 `page=3`、`page=5`，确认返回空页而不是 HTTP 500。
-- 验证 Local、Dropbox 上传、下载、复制、移动、删除和文件夹流式 ZIP 下载。
+- 验证 Local 上传、下载、复制、移动、删除和文件夹流式 ZIP 下载。
 - 在启用目录大小统计的 Local 挂载上依次执行刷新、上传、删除、目录重命名和再次
   刷新，使用包含隐藏文件的独立 `filepath.WalkDir` 统计结果核对根目录及父目录大小。
 - 验证 Local 根内相对符号链接可访问，根外和绝对目标符号链接不能越过存储根。
@@ -151,7 +150,7 @@ GOTOOLCHAIN=local GOPROXY=off GOSUMDB=off go test -mod=vendor -race ./internal/s
 - 确认压缩包元数据响应不再返回指向 `/ad`、`/ae` 的 `raw_url` 或 Archive `sign`。
 - 使用已有数据目录升级时，确认旧游客账号被清理，其他用户、存储和权限数据保持不变。
 - 使用全新数据目录启动，确认 `search_index` 默认为 `no_index` 且无需构建索引即可在
-  Local 和 Dropbox 挂载下搜索到文件；使用已有数据目录升级，确认原来的 `search_index`
+  Local 挂载下搜索到文件；使用已有数据目录升级，确认原来的 `search_index`
   取值（包括 `none`）不被覆盖。
 - 在 `no_index` 模式下确认 `/api/admin/index/build|update|stop|clear|progress` 仍
   返回不可用，`/api/fs/search` 正常工作。
