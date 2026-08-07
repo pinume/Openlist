@@ -4,7 +4,6 @@ import (
 	"context"
 	stderrors "errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"os"
 	stdpath "path"
@@ -347,22 +346,6 @@ var ArchiveContentUploadTaskManager = &archiveContentUploadTaskManagerType{
 	Manager: nil,
 }
 
-func archiveMeta(ctx context.Context, path string, args model.ArchiveMetaArgs) (*model.ArchiveMetaProvider, error) {
-	storage, actualPath, err := op.GetStorageAndActualPath(path)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed get storage")
-	}
-	return op.GetArchiveMeta(ctx, storage, actualPath, args)
-}
-
-func archiveList(ctx context.Context, path string, args model.ArchiveListArgs) ([]model.Obj, error) {
-	storage, actualPath, err := op.GetStorageAndActualPath(path)
-	if err != nil {
-		return nil, errors.WithMessage(err, "failed get storage")
-	}
-	return op.ListArchive(ctx, storage, actualPath, args)
-}
-
 func archiveDecompress(ctx context.Context, srcObjPath, dstDirPath string, args model.ArchiveDecompressArgs, lazyCache ...bool) (task.TaskExtensionInfo, error) {
 	srcStorage, srcObjActualPath, err := op.GetStorageAndActualPath(srcObjPath)
 	if err != nil {
@@ -419,20 +402,4 @@ func archiveDecompress(ctx context.Context, srcObjPath, dstDirPath string, args 
 		ArchiveDownloadTaskManager.Add(tsk)
 		return tsk, nil
 	}
-}
-
-func archiveDriverExtract(ctx context.Context, path string, args model.ArchiveInnerArgs) (*model.Link, model.Obj, error) {
-	storage, actualPath, err := op.GetStorageAndActualPath(path)
-	if err != nil {
-		return nil, nil, errors.WithMessage(err, "failed get storage")
-	}
-	return op.DriverExtract(ctx, storage, actualPath, args)
-}
-
-func archiveInternalExtract(ctx context.Context, path string, args model.ArchiveInnerArgs) (io.ReadCloser, int64, error) {
-	storage, actualPath, err := op.GetStorageAndActualPath(path)
-	if err != nil {
-		return nil, 0, errors.WithMessage(err, "failed get storage")
-	}
-	return op.InternalExtract(ctx, storage, actualPath, args)
 }

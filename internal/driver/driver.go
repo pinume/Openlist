@@ -160,29 +160,6 @@ type PutResult interface {
 	Put(ctx context.Context, dstDir model.Obj, file model.FileStreamer, up UpdateProgress) (model.Obj, error)
 }
 
-type ArchiveReader interface {
-	// GetArchiveMeta get the meta-info of an archive
-	// return errs.WrongArchivePassword if the meta-info is also encrypted but provided password is wrong or empty
-	// return errs.NotImplement to use internal archive tools to get the meta-info, such as the following cases:
-	// 1. the driver do not support the format of the archive but there may be an internal tool do
-	// 2. handling archives is a VIP feature, but the driver does not have VIP access
-	GetArchiveMeta(ctx context.Context, obj model.Obj, args model.ArchiveArgs) (model.ArchiveMeta, error)
-	// ListArchive list the children of model.ArchiveArgs.InnerPath in the archive
-	// return errs.NotImplement to use internal archive tools to list the children
-	// return errs.NotSupport if the folder structure should be acquired from model.ArchiveMeta.GetTree
-	ListArchive(ctx context.Context, obj model.Obj, args model.ArchiveInnerArgs) ([]model.Obj, error)
-	// Extract get url/filepath/reader of a file in the archive
-	// return errs.NotImplement to use internal archive tools to extract
-	Extract(ctx context.Context, obj model.Obj, args model.ArchiveInnerArgs) (*model.Link, error)
-}
-
-type ArchiveGetter interface {
-	// ArchiveGet get file by inner path
-	// return errs.NotImplement to use internal archive tools to get the children
-	// return errs.NotSupport if the folder structure should be acquired from model.ArchiveMeta.GetTree
-	ArchiveGet(ctx context.Context, obj model.Obj, args model.ArchiveInnerArgs) (model.Obj, error)
-}
-
 type ArchiveDecompress interface {
 	ArchiveDecompress(ctx context.Context, srcObj, dstDir model.Obj, args model.ArchiveDecompressArgs) error
 }

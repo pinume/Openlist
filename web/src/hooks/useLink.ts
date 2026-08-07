@@ -1,5 +1,5 @@
 import { objStore, selectedObjs, State, me } from "~/store"
-import { Obj, ArchiveObj } from "~/types"
+import { Obj } from "~/types"
 import {
   base_path,
   api,
@@ -31,23 +31,9 @@ export const getLinkByDirAndObj = (
     if (!api.startsWith(location.origin + base_path))
       host = location.origin + base_path
   }
-  const { inner_path, archive, pass: archive_pass } = obj as ArchiveObj
-  if (archive) {
-    prefix = "/ae"
-    path = `${dir}/${archive.name}`
-    path = encodePath(path, encodeAll)
-  }
-  let QP = () => {
-    QP = () => "&"
-    return "?"
-  }
   let ans = `${host}${prefix}${path}`
   if (type !== "page" && obj.sign) {
-    ans += `${QP()}sign=${obj.sign}`
-  }
-  if (archive) {
-    let inner = `${inner_path}/${obj.name}`
-    ans += `${QP()}inner=${encodePath(inner, encodeAll)}${archive_pass ? `&pass=${encodeURIComponent(archive_pass)}` : ""}`
+    ans += `?sign=${obj.sign}`
   }
   return ans
 }

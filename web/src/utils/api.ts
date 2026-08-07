@@ -7,8 +7,6 @@ import {
   PResp,
   FsSearchResp,
   RenameObj,
-  ArchiveMeta,
-  PPageResp,
 } from "~/types"
 import { r } from "."
 
@@ -142,54 +140,6 @@ export const fsNewFile = (
   })
 }
 
-export const fsArchiveMeta = (
-  path: string = "/",
-  password = "",
-  archive_pass = "",
-  refresh = false,
-  cancelToken?: CancelToken,
-): PResp<ArchiveMeta> => {
-  return r.post(
-    "/fs/archive/meta",
-    {
-      path,
-      password,
-      archive_pass,
-      refresh,
-    },
-    {
-      cancelToken: cancelToken,
-    },
-  )
-}
-
-export const fsArchiveList = (
-  path: string = "/",
-  password = "",
-  archive_pass = "",
-  inner_path = "/",
-  page = 1,
-  per_page = 0,
-  refresh = false,
-  cancelToken?: CancelToken,
-): PPageResp<Obj> => {
-  return r.post(
-    "/fs/archive/list",
-    {
-      path,
-      password,
-      archive_pass,
-      inner_path,
-      page,
-      per_page,
-      refresh,
-    },
-    {
-      cancelToken: cancelToken,
-    },
-  )
-}
-
 export const fsArchiveDecompress = (
   src_dir: string,
   dst_dir: string,
@@ -261,16 +211,3 @@ export const fsSearch = async (
   })
 }
 
-export const buildIndex = async (paths = ["/"], max_depth = -1): PEmptyResp => {
-  return r.post("/admin/index/build", {
-    paths,
-    max_depth,
-  })
-}
-
-export const updateIndex = async (paths = [], max_depth = -1): PEmptyResp => {
-  return r.post("/admin/index/update", {
-    paths,
-    max_depth,
-  })
-}

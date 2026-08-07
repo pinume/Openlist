@@ -78,16 +78,6 @@ type ArchiveInnerArgs struct {
 	InnerPath string
 }
 
-type ArchiveMetaArgs struct {
-	ArchiveArgs
-	Refresh bool
-}
-
-type ArchiveListArgs struct {
-	ArchiveInnerArgs
-	Refresh bool
-}
-
 type ArchiveDecompressArgs struct {
 	ArchiveInnerArgs
 	CacheFull     bool
