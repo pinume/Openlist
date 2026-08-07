@@ -33,11 +33,8 @@ const PackageDownload = (props: { onClose: () => void }) => {
   // 3: fetching files
   // 4: success
   const [status, setStatus] = createSignal(0)
-  const { pathname, isShare } = useRouter()
+  const { pathname } = useRouter()
   const selectedObjs = _selectedObjs()
-  // if (!selectedObjs.length) {
-  //   notify.warning(t("home.toolbar.no_selected"));
-  // }
   const fetchFolderStructure = async (
     pre: string,
     obj: Obj,
@@ -50,7 +47,6 @@ const PackageDownload = (props: { onClose: () => void }) => {
             pathJoin(pathname(), pre),
             obj,
             "direct",
-            isShare(),
             true,
           ),
         },
@@ -109,7 +105,6 @@ const PackageDownload = (props: { onClose: () => void }) => {
             name = name.replace(`${saveName}/`, "")
           }
           const url = it.value.url
-          // console.log(name, url);
           return fetch(url).then((res) => {
             if (!res.ok) {
               throw new Error(
