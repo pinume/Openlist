@@ -1,5 +1,4 @@
 export * from "./FullLoading"
-export * from "./Hello"
 export * from "./FolderTree"
 export * from "./EnhancedFolderTree"
 export * from "./MultiPathInput"
