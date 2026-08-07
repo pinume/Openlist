@@ -20,7 +20,7 @@ export const Right = () => {
   const margin = createMemo(() => (isOpen() ? "$4" : "$5"))
   const isFolder = createMemo(() => objStore.state === State.Folder)
   const { refresh } = usePath()
-  const { isShare, to } = useRouter()
+  const { to } = useRouter()
   return (
     <Box
       class="left-toolbar-box"
@@ -46,8 +46,6 @@ export const Right = () => {
           p="$1"
           rounded="$lg"
           spacing="$1"
-          // shadow="0px 10px 30px -5px rgba(0, 0, 0, 0.3)"
-          // bgColor={useColorModeValue("white", "$neutral4")()}
           bgColor="$neutral1"
           as={Motion.div}
           initial={{ opacity: 0, scale: 0.9 }}
@@ -60,7 +58,6 @@ export const Right = () => {
             <Show
               when={
                 isFolder() &&
-                !isShare() &&
                 (userCan("write_content") || objStore.write_content_bypass) &&
                 objStore.write
               }
@@ -88,11 +85,7 @@ export const Right = () => {
                 }}
               />
             </Show>
-            <Show
-              when={
-                isFolder() && !isShare() && userCan("move") && objStore.write
-              }
-            >
+            <Show when={isFolder() && userCan("move") && objStore.write}>
               <RightIcon
                 as={operations.recursive_move.icon}
                 tips="recursive_move"
@@ -101,11 +94,7 @@ export const Right = () => {
                 }}
               />
             </Show>
-            <Show
-              when={
-                isFolder() && !isShare() && userCan("delete") && objStore.write
-              }
-            >
+            <Show when={isFolder() && userCan("delete") && objStore.write}>
               <RightIcon
                 as={operations.remove_empty_directory.icon}
                 tips="remove_empty_directory"
@@ -114,11 +103,7 @@ export const Right = () => {
                 }}
               />
             </Show>
-            <Show
-              when={
-                isFolder() && !isShare() && userCan("rename") && objStore.write
-              }
-            >
+            <Show when={isFolder() && userCan("rename") && objStore.write}>
               <RightIcon
                 as={operations.batch_rename.icon}
                 tips="batch_rename"
@@ -131,7 +116,6 @@ export const Right = () => {
             <Show
               when={
                 isFolder() &&
-                !isShare() &&
                 (userCan("write_content") || objStore.write_content_bypass) &&
                 objStore.write
               }
