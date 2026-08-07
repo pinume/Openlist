@@ -1,5 +1,5 @@
 import { Menu, Item, Submenu } from "solid-contextmenu"
-import { useRouter, useSelectedLink, useT } from "~/hooks"
+import { useSelectedLink, useT } from "~/hooks"
 import "solid-contextmenu/dist/style.css"
 import { HStack, Icon, Text, useColorMode } from "@hope-ui/solid"
 import { operations } from "../toolbar/operations"
@@ -39,7 +39,6 @@ export const ContextMenu = () => {
   const canPackageDownload = () => {
     return UserMethods.is_admin(me()) || getSettingBool("package_download")
   }
-  const { isShare } = useRouter()
   return (
     <Menu
       id={1}
@@ -50,7 +49,7 @@ export const ContextMenu = () => {
       <For each={["rename", "move", "copy", "delete"] as const}>
         {(name) => (
           <Item
-            hidden={!userCan(name) || !objStore.write || isShare()}
+            hidden={!userCan(name) || !objStore.write}
             onClick={() => {
               bus.emit("tool", name)
             }}
@@ -62,7 +61,6 @@ export const ContextMenu = () => {
       <Item
         hidden={() => {
           return (
-            isShare() ||
             !userCan("decompress") ||
             !objStore.write ||
             selectedObjs().some((o) => o.is_dir) ||

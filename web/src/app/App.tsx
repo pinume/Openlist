@@ -23,7 +23,6 @@ import { globalStyles } from "./theme"
 const Home = lazy(() => import("~/pages/home/Layout"))
 const Manage = lazy(() => import("~/pages/manage"))
 const Login = lazy(() => import("~/pages/login"))
-const Test = lazy(() => import("~/pages/test"))
 
 const App: Component = () => {
   const t = useT()
@@ -81,7 +80,6 @@ const App: Component = () => {
       <Switch
         fallback={
           <Routes base={base_path}>
-            <Route path="/@test" component={Test} />
             <Route path="/@login" component={Login} />
             <Route
               path="/@manage/*"

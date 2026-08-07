@@ -9,7 +9,6 @@ import {
   standardizePath,
 } from "~/utils"
 import { useRouter } from "."
-import { cookieStorage } from "@solid-primitives/storage"
 
 type URLType = "page" | "direct" | "proxy"
 
@@ -18,19 +17,15 @@ export const getLinkByDirAndObj = (
   dir: string,
   obj: Obj,
   type: URLType = "direct",
-  isShare: boolean,
   encodeAll?: boolean,
 ) => {
-  if (type !== "page")
-    dir = isShare
-      ? dir.substring(3) /* remove /@s */
-      : pathJoin(me().base_path, dir)
+  if (type !== "page") dir = pathJoin(me().base_path, dir)
 
   dir = standardizePath(dir, true)
   let path = `${dir}/${obj.name}`
   path = encodePath(path, encodeAll)
   let host = api
-  let prefix = isShare ? "/sd" : type === "direct" ? "/d" : "/p"
+  let prefix = type === "direct" ? "/d" : "/p"
   if (type === "page") {
     prefix = ""
     if (!api.startsWith(location.origin + base_path))
@@ -47,14 +42,8 @@ export const getLinkByDirAndObj = (
     return "?"
   }
   let ans = `${host}${prefix}${path}`
-  if (type !== "page" && !isShare && obj.sign) {
+  if (type !== "page" && obj.sign) {
     ans += `${QP()}sign=${obj.sign}`
-  }
-  if (type !== "page" && isShare) {
-    const pwd = cookieStorage.getItem("browser-password") || ""
-    if (pwd) {
-      ans += `${QP()}pwd=${pwd}`
-    }
   }
   if (archive) {
     let inner = `${inner_path}/${obj.name}`
@@ -65,19 +54,15 @@ export const getLinkByDirAndObj = (
 
 // get download link by current state and pathname
 export const useLink = () => {
-  const { pathname, isShare } = useRouter()
+  const { pathname } = useRouter()
   const getLinkByObj = (obj: Obj, type?: URLType, encodeAll?: boolean) => {
     let dir: string
     if (objStore.state === State.File) {
       dir = pathDir(pathname())
-      if (isShare() && dir === "/@s") {
-        dir = pathname()
-        obj = { ...obj, name: "" }
-      }
     } else {
       dir = pathname()
     }
-    return getLinkByDirAndObj(dir, obj, type, isShare(), encodeAll)
+    return getLinkByDirAndObj(dir, obj, type, encodeAll)
   }
   const rawLink = (obj: Obj, encodeAll?: boolean) => {
     return getLinkByObj(obj, "direct", encodeAll)
