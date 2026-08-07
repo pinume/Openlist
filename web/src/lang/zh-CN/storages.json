@@ -57,7 +57,9 @@
     "start_load_success": "已开始重新加载",
     "load_all": "重新加载全部",
     "advanced": "高级选项",
-    "save_success_hint": "已保存。可在「用户」中设置 base_path，限制用户可见范围。"
+    "save_success_hint": "已保存。可在「用户」中设置 base_path，限制用户可见范围。",
+    "unknown_type": "未知类型",
+    "local_driver_unavailable": "Local 驱动不可用"
   },
   "page": {
     "add": "添加挂载",

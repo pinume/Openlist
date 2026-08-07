@@ -66,7 +66,7 @@ const Item = (props: ItemProps) => {
             : `drivers.${props.driver}.${props.name}`,
         )}
       </FormLabel>
-      <Switch fallback={<Center>未知类型</Center>}>
+      <Switch fallback={<Center>{t("storages.other.unknown_type")}</Center>}>
         <Match when={props.type === Type.String}>
           <Input
             id={props.name}

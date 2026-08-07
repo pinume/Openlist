@@ -112,7 +112,7 @@ const AddOrEdit = () => {
     handleResp(resp, (data) => {
       const local = data[LOCAL_DRIVER]
       if (!local) {
-        notify.error("Local driver is not available")
+        notify.error(t("storages.other.local_driver_unavailable"))
         return
       }
       setDriverInfo(local)
