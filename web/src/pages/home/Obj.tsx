@@ -6,7 +6,6 @@ import {
   lazy,
   Match,
   on,
-  Show,
   Suspense,
   Switch,
 } from "solid-js"
