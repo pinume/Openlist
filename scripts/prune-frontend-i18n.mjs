@@ -23,7 +23,7 @@ const keepKeys = (object, keys) =>
     keys.filter((key) => key in object).map((key) => [key, object[key]]),
   )
 
-const driverNames = ["Local", "Dropbox"]
+const driverNames = ["Local"]
 const drivers = await readJSON("drivers.json")
 const prunedDrivers = keepKeys(drivers, driverNames)
 prunedDrivers.config = keepKeys(drivers.config, driverNames)
