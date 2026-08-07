@@ -28,7 +28,7 @@ type IRootId interface {
 }
 
 type RootPath struct {
-	RootFolderPath string `json:"root_folder_path"`
+	RootFolderPath string `json:"root_folder_path" help:"The absolute path of the directory on the server, e.g. /data/files"`
 }
 
 type RootID struct {
