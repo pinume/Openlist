@@ -1,25 +1,14 @@
 {
   "Local": {
-    "directory_size": "目录大小",
-    "directory_size-tips": "这可能会影响主机的性能",
+    "directory_size": "目录大小统计",
+    "directory_size-tips": "启用后会统计目录大小，可能影响主机性能",
     "mkdir_perm": "创建文件夹权限",
+    "mkdir_perm-tips": "新建目录的权限位（八进制），例如 777",
     "recycle_bin_path": "回收站路径",
-    "recycle_bin_path-tips": "回收站的路径，如果空或保留“永久删除”则永久删除",
-    "root_folder_path": "根文件夹路径",
-    "show_hidden": "显示隐藏",
-    "show_hidden-tips": "显示隐藏目录以及文件",
-    "thumb_cache_folder": "缩略图缓存文件夹",
-    "thumb_concurrency": "缩略图并发数",
-    "thumb_concurrency-tips": "同时生成缩略图的数量。这控制了可以并行生成多少缩略图。",
-    "thumbnail": "缩略图",
-    "thumbnail-tips": "启用缩略图",
-    "video_thumb_pos": "视频缩略图",
-    "video_thumb_pos-tips": "视频缩略图的位置。如果该值是一个数字（整数点浮点），它代表几秒钟的时间。如果值以“%”结尾，则代表视频持续时间的百分比。"
-  },
-  "config": {
-    "Local": {}
-  },
-  "drivers": {
-    "Local": "本机存储"
+    "recycle_bin_path-tips": "回收站的路径，空或保留「永久删除」则永久删除；须在服务器目录内部",
+    "root_folder_path": "服务器目录",
+    "root_folder_path-tips": "服务器上的绝对路径，例如 /data/files",
+    "show_hidden": "显示隐藏文件",
+    "show_hidden-tips": "列表中显示以点开头的隐藏目录和文件"
   }
 }
