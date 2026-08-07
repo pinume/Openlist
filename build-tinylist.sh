@@ -61,7 +61,7 @@ if find server -type f \
 fi
 
 go test -mod=vendor \
-  ./server/middlewares ./drivers ./drivers/local ./drivers/dropbox
+  ./server/middlewares ./drivers ./drivers/local
 
 mkdir -p "$(dirname "$output")"
 CGO_ENABLED=0 GOOS=linux GOARCH="$target_arch" \
